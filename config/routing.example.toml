@@ -1,0 +1,24 @@
+[models.free]
+endpoint = "https://internal-model-gateway.example/v1"
+model = "free-tier-model"
+
+[models.frontier]
+endpoint = "https://frontier-model-gateway.example/v1"
+model = "frontier-tier-model"
+
+[levels.mechanical]
+tier = "free"
+
+[levels.routine]
+tier = "free"
+
+[levels.judgment]
+tier = "frontier"
+
+[levels.high_stakes]
+tier = "frontier"
+
+[[escalation]]
+from = "free"
+to = "frontier"
+when = ["ambiguity_high", "confidence_low", "production_touching", "high_stakes"]
