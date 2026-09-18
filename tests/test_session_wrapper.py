@@ -2,6 +2,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -149,3 +150,54 @@ def test_context_excludes_candidates(repo):
     )
     wrap_interactive(repo, [sys.executable, "-c", "pass"], backend)
     assert "Unreviewed" not in (repo.project_root / "AGENT_CONTEXT.md").read_text()
+
+
+
+def test_async_accepts_before_child_finishes_and_streams_large_logs(repo):
+    import time
+
+    from above_all.async_outcomes import launch_async
+
+    accepted = launch_async(repo, [sys.executable, "-c", "import time; print('x'*2000000); time.sleep(1)"], "long run")
+    assert accepted.status == "accepted"
+    db = sqlite3.connect(repo.global_root / "assistant.db")
+    assert db.execute("SELECT status FROM outcomes WHERE id=?", (accepted.outcome_id,)).fetchone()[0] in {"pending", "running"}
+    db.close()
+    deadline = time.time() + 5
+    while time.time() < deadline and not (accepted.session_dir / "result.json").exists():
+        time.sleep(.05)
+    assert (accepted.session_dir / "stdout.log").stat().st_size >= 2_000_000
+
+
+def test_missing_executable_becomes_blocked_with_evidence(repo):
+    import time
+
+    from above_all.async_outcomes import launch_async
+
+    accepted = launch_async(repo, ["definitely-not-an-executable"], "cannot launch")
+    deadline = time.time() + 5
+    while time.time() < deadline and not (accepted.session_dir / "result.json").exists():
+        time.sleep(.05)
+    result = json.loads((accepted.session_dir / "result.json").read_text())
+    assert result["status"] == "blocked" and "launch failed" in result["summary"]
+
+
+def test_reconcile_marks_killed_wrapper_blocked_and_preserves_logs(repo):
+    from above_all.async_outcomes import reconcile
+
+    session = repo.project_root / "sessions" / "dead"
+    session.mkdir(parents=True)
+    (session / "stdout.log").write_text("partial output")
+    manifest = {"session_id": "dead", "outcome_id": "out-dead", "intent": "dead run", "command": [], "provider": "test", "session_dir": str(session), "started_at": "2026-09-18T00:00:00+00:00", "scopes": [[str(repo.global_root / "assistant.db"), GLOBAL_MIGRATIONS, repo.project_root.parent.name], [str(repo.project_root / "assistant.db"), PROJECT_MIGRATIONS, None]]}
+    (session / "worker.json").write_text(json.dumps(manifest))
+    (session / "worker.pid").write_text("99999999")
+    for path, migrations, project in manifest["scopes"]:
+        db = migrate(Path(path), migrations)
+        if project:
+            db.execute("INSERT INTO outcomes VALUES (?,?,?,?,?,?,?,?)", ("out-dead", project, "dead run", "running", "session:dead", "session:dead", "x", "x"))
+        else:
+            db.execute("INSERT INTO outcomes VALUES (?,?,?,?,?,?,?)", ("out-dead", "dead run", "running", "session:dead", "session:dead", "x", "x"))
+        db.execute("INSERT INTO sessions(id,provider,mode,outcome_id,started_at,source_path) VALUES (?,?,?,?,?,?)", ("dead", "test", "headless", "out-dead", "x", str(session)))
+        db.commit(); db.close()
+    assert reconcile(repo)[0]["status"] == "blocked"
+    assert (session / "stdout.log").read_text() == "partial output"
