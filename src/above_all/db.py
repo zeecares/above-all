@@ -51,9 +51,17 @@ def migrate(path: Path, migrations: Iterable[str]) -> sqlite3.Connection:
     applied = {r[0] for r in db.execute("SELECT version FROM schema_migrations")}
     for version, sql in enumerate(migrations, 1):
         if version not in applied:
-            with db:
-                db.executescript(sql)
-                db.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
+            # executescript() commits any pending transaction before running, so
+            # wrap the migration and version marker in one explicit script. Without
+            # this, a crash after DDL but before the marker leaves a half-recorded
+            # migration that cannot be distinguished from an old store.
+            quoted_version = int(version)
+            db.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + sql
+                + f"\nINSERT INTO schema_migrations(version) VALUES ({quoted_version});\n"
+                + "COMMIT;"
+            )
     return db
 
 
