@@ -357,3 +357,30 @@ def test_malformed_agent_config_fails_loudly(world: World):
     result = world.cli("work", check=False)
     assert result.returncode != 0
     assert "toml" in result.stderr.lower()
+
+
+
+def test_wheel_install_init_includes_example_configs(tmp_path: Path):
+    wheel_dir = tmp_path / "wheel"
+    wheel_dir.mkdir()
+    subprocess.run(
+        [sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "-w", str(wheel_dir)],
+        check=True, capture_output=True, text=True,
+    )
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    wheel = next(wheel_dir.glob("above_all-*.whl"))
+    subprocess.run([str(python), "-m", "pip", "install", str(wheel)], check=True, capture_output=True)
+    home = tmp_path / "installed-home"
+    repo = tmp_path / "installed-repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    env = dict(os.environ, ABOVE_ALL_HOME=str(home))
+    result = subprocess.run(
+        [str(python), "-m", "above_all.cli", "init"], cwd=repo, env=env,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (home / "agent.toml").is_file()
+    assert (home / "routing.toml").is_file()
