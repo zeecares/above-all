@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from .agent_context import merged_active_notes
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .paths import Scopes
 from .traces import find_claude_transcript, import_claude_code_jsonl
@@ -42,10 +43,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _select_relevant_notes(db: sqlite3.Connection | None, backend) -> list[dict]:
-    if db is None:
-        return []
-    notes = backend.active_notes(db, MAX_ENVELOPE_NOTES)
+def _select_relevant_notes(global_db: sqlite3.Connection, project_db: sqlite3.Connection | None, backend) -> list[dict]:
+    notes = merged_active_notes(global_db, project_db, backend, MAX_ENVELOPE_NOTES)
     selected, used = [], 0
     for note in notes:
         text = f"# {note['title']}\n\n{note['body'].strip()}"
@@ -257,7 +256,7 @@ def dispatch_headless(
     session_dir = scope_dir / "sessions" / session_id
     global_db, project_db = _open_scope_dbs(scopes)
     try:
-        relevant = _select_relevant_notes(project_db, backend)
+        relevant = _select_relevant_notes(global_db, project_db, backend)
         envelope = _write_handoff(
             session_dir,
             intent,
@@ -381,7 +380,7 @@ def wrap_interactive(
     global_db, project_db = _open_scope_dbs(scopes)
     try:
         if project_db is not None:
-            context_path = generate_agent_context(scopes.project_root, project_db, backend)
+            context_path = generate_agent_context(scopes.project_root, project_db, backend, global_db)
         session = {
             "id": session_id,
             "provider": provider,
