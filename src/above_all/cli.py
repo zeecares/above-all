@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
+from importlib.resources import files
 from pathlib import Path
 
 from .agent_context import generate_agent_context
@@ -26,12 +26,12 @@ def init_scopes(project: bool = True, share_approved: bool = False):
     scopes = resolve_scopes()
     migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS).close()
     scopes.global_root.mkdir(parents=True, exist_ok=True)
-    examples = Path(__file__).parents[2] / "config"
+    examples = files("above_all") / "config"
     for name in ("routing", "agent"):
         target = scopes.global_root / f"{name}.toml"
         example = examples / f"{name}.example.toml"
-        if not target.exists() and example.exists():
-            shutil.copy(example, target)
+        if not target.exists() and example.is_file():
+            target.write_bytes(example.read_bytes())
     if project and scopes.project_root:
         ensure_project_privacy(scopes.project_root.parent, share_approved)
         migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS).close()
@@ -215,13 +215,15 @@ def main(argv: list[str] | None = None) -> int:
         elif args.note_command == "discard":
             print(backend.discard(scopes.project_root, args.candidate_id))
         else:
+            global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
             db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
-            print(generate_agent_context(scopes.project_root, db, backend))
+            try:
+                print(generate_agent_context(scopes.project_root, db, backend, global_db))
+            finally:
+                global_db.close()
+                db.close()
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
