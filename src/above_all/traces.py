@@ -68,7 +68,7 @@ def parse_claude_code_jsonl(path: Path, fallback_session_id: str | None = None) 
             except json.JSONDecodeError as exc:
                 raise ValueError(f"invalid JSON at line {line_no}: {exc.msg}") from exc
             if not isinstance(row, dict):
-                raise TypeError(f"record at line {line_no} is not an object")
+                raise ValueError(f"record at line {line_no} is not an object")
             session_id = row.get("sessionId") or fallback_session_id
             if not session_id:
                 raise ValueError(f"record at line {line_no} has no sessionId")
@@ -87,7 +87,7 @@ def parse_claude_code_jsonl(path: Path, fallback_session_id: str | None = None) 
             if kind in {"user", "assistant"}:
                 content = message.get("content", row.get("content", ""))
                 parsed.messages.append((uuid, parsed.session_id, line_no, kind, ts, _text(content), active))
-                if kind == "assistant":
+                if kind == "assistant" and active:
                     usage = message.get("usage") or row.get("usage") or {}
                     parsed.tokens_in += int(usage.get("input_tokens") or 0)
                     parsed.tokens_out += int(usage.get("output_tokens") or 0)
@@ -96,7 +96,7 @@ def parse_claude_code_jsonl(path: Path, fallback_session_id: str | None = None) 
                         if isinstance(block, dict) and block.get("type") == "tool_use":
                             call_id = str(block.get("id") or f"{uuid}:tool:{index}")
                             parsed.tools.append((call_id, parsed.session_id, line_no, str(block.get("name") or "unknown"), ts, "unknown", None, None))
-                else:
+                elif kind == "user" and active:
                     for block in content if isinstance(content, list) else []:
                         if isinstance(block, dict) and block.get("type") == "tool_result":
                             call_id = block.get("tool_use_id")
@@ -123,10 +123,13 @@ def import_claude_code_jsonl(db: sqlite3.Connection, path: Path, fallback_sessio
     data = path.read_bytes()
     fingerprint = hashlib.sha256(data).hexdigest()
     source_path = str(path.resolve())
-    existing = db.execute("SELECT fingerprint FROM trace_imports WHERE source_path=?", (source_path,)).fetchone()
+    existing = db.execute("SELECT fingerprint,status,warning FROM trace_imports WHERE source_path=?", (source_path,)).fetchone()
     if existing:
-        if existing[0] == fingerprint:
-            return {"status": "noop", "fingerprint": fingerprint, "warnings": []}
+        existing_fingerprint, existing_status, existing_warning = existing
+        if existing_fingerprint == fingerprint:
+            if existing_status == "imported":
+                return {"status": "noop", "fingerprint": fingerprint, "warnings": []}
+            raise ValueError(existing_warning or f"previous trace import status is {existing_status}")
         warning = "source fingerprint changed; refusing silent overwrite"
         with db:
             db.execute("UPDATE trace_imports SET status='changed',warning=? WHERE source_path=?", (warning, source_path))
