@@ -47,3 +47,12 @@ def merge_rows(global_rows: Iterable[sqlite3.Row], project_rows: Iterable[sqlite
     merged = {row["id"]: dict(row) for row in global_rows}
     merged.update({row["id"]: dict(row) for row in project_rows})
     return [merged[key] for key in sorted(merged)]
+
+
+# Weekend 4: schedules and internal proactive events belong in the control plane.
+GLOBAL_MIGRATIONS.append("""CREATE TABLE watches (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('clock','cadence','event','deadline')), spec_json TEXT NOT NULL, next_fire_at TEXT, interruption_policy TEXT NOT NULL DEFAULT 'value-gated', created_at TEXT NOT NULL);
+CREATE TABLE proactive_events (id INTEGER PRIMARY KEY AUTOINCREMENT, watch_id TEXT, created_at TEXT NOT NULL, payload_json TEXT NOT NULL, value TEXT, status TEXT NOT NULL CHECK(status IN ('pending','surfaced','internal')) DEFAULT 'pending', FOREIGN KEY(watch_id) REFERENCES watches(id));
+""")
+PROJECT_MIGRATIONS.append("""CREATE TABLE watches (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('clock','cadence','event','deadline')), spec_json TEXT NOT NULL, next_fire_at TEXT, interruption_policy TEXT NOT NULL DEFAULT 'value-gated', created_at TEXT NOT NULL);
+CREATE TABLE proactive_events (id INTEGER PRIMARY KEY AUTOINCREMENT, watch_id TEXT, created_at TEXT NOT NULL, payload_json TEXT NOT NULL, value TEXT, status TEXT NOT NULL CHECK(status IN ('pending','surfaced','internal')) DEFAULT 'pending', FOREIGN KEY(watch_id) REFERENCES watches(id));
+""")
