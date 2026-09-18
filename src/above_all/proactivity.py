@@ -1,25 +1,35 @@
-"""Persisted watches and one restraint gate for every proactive event."""
+"""Persisted watches and a fail-closed restraint gate."""
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+
+ALLOWED_VALUE_CATEGORIES = {"decision", "risk", "saved_step"}
+ValueClassifier = Callable[[str, dict], dict | None]
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _identity(kind: str, spec: dict) -> str:
+    return hashlib.sha256(json.dumps({"kind": kind, "spec": spec}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def create_watch(db: sqlite3.Connection, kind: str, spec: dict, next_fire_at: str | None = None, policy: str = "value-gated") -> str:
     if kind not in {"clock", "cadence", "event", "deadline"}:
         raise ValueError(f"unsupported watch kind {kind!r}")
+    if policy not in {"value-gated", "internal-only"}:
+        raise ValueError(f"unsupported interruption policy {policy!r}")
     if kind == "cadence" and (not isinstance(spec.get("minutes"), int) or spec["minutes"] <= 0):
         raise ValueError("cadence watch requires positive integer minutes")
-    watch_id = uuid4().hex
+    identity = _identity(kind, spec)
     with db:
-        db.execute("INSERT INTO watches VALUES (?,?,?,?,?,?)", (watch_id, kind, json.dumps(spec, sort_keys=True), next_fire_at, policy, _now()))
-    return watch_id
+        db.execute("INSERT INTO watches(id,kind,spec_json,next_fire_at,interruption_policy,created_at,identity) VALUES (?,?,?,?,?,?,?) ON CONFLICT(identity) DO UPDATE SET next_fire_at=COALESCE(excluded.next_fire_at,watches.next_fire_at), interruption_policy=excluded.interruption_policy", (identity, kind, json.dumps(spec, sort_keys=True), next_fire_at, policy, _now(), identity))
+    return identity
 
 
 def due_watches(db: sqlite3.Connection, now: str | None = None) -> list[dict]:
@@ -42,17 +52,29 @@ def fire_watch(db: sqlite3.Connection, watch_id: str, payload: dict, value: str 
     return cursor.lastrowid
 
 
-def value_gate(db: sqlite3.Connection) -> dict:
-    """Surface only events that name a concrete value. Keep the rest internal and logged."""
+def classify_value_placeholder(value: str, payload: dict) -> dict | None:
+    """Model-routing seam. Deliberately fail closed until a routed classifier is configured."""
+    return None
+
+
+def value_gate(db: sqlite3.Connection, classifier: ValueClassifier | None = None) -> dict:
+    """Surface only classifier-confirmed decision/risk/saved-step value; otherwise log internally."""
+    classifier = classifier or classify_value_placeholder
     surfaced, internal = [], []
-    rows = db.execute("SELECT id,watch_id,payload_json,value FROM proactive_events WHERE status='pending' ORDER BY id").fetchall()
+    rows = db.execute("SELECT e.id,e.watch_id,e.payload_json,e.value,w.interruption_policy FROM proactive_events e JOIN watches w ON w.id=e.watch_id WHERE e.status='pending' ORDER BY e.id").fetchall()
     with db:
         for row in rows:
             item = {"id": row[0], "watch_id": row[1], "payload": json.loads(row[2]), "value": row[3]}
-            if row[3]:
-                db.execute("UPDATE proactive_events SET status='surfaced' WHERE id=?", (row[0],))
-                surfaced.append(item)
+            decision = None
+            if row[4] == "value-gated" and row[3]:
+                try:
+                    decision = classifier(row[3], item["payload"])
+                except (TypeError, ValueError, RuntimeError):
+                    decision = None
+            valid = isinstance(decision, dict) and decision.get("category") in ALLOWED_VALUE_CATEGORIES and isinstance(decision.get("reason"), str) and bool(decision["reason"].strip())
+            if valid:
+                item["value_category"] = decision["category"]; item["value_reason"] = decision["reason"].strip()
+                db.execute("UPDATE proactive_events SET status='surfaced' WHERE id=?", (row[0],)); surfaced.append(item)
             else:
-                db.execute("UPDATE proactive_events SET status='internal' WHERE id=?", (row[0],))
-                internal.append(item)
+                db.execute("UPDATE proactive_events SET status='internal' WHERE id=?", (row[0],)); internal.append(item)
     return {"surfaced": surfaced, "internal_count": len(internal)}

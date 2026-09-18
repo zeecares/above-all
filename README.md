@@ -8,8 +8,8 @@ Weekend 4 adds reviewed consolidation and restrained proactivity:
 
 - a daily expiry sweep marks stale active notes `needs-review`, removes them from FTS, and never touches candidates
 - the bounded weekly pass proposes a changeset for duplicates, contradictions, reviewed promotions, and Weekend 3 trace-analysis queues; it cannot apply without explicit approval and preserves superseded/contradictory evidence
-- pollution metrics report note status, candidate volume, context size, session token totals, and cost without calling a model directly
-- persisted clock, cadence, event, and deadline watches fire internal events; one value gate surfaces only items naming a concrete decision, risk, or saved step, while valueless items remain logged and internal
+- pollution metrics expose admission/use, recent replacement/contradiction, retrieval-recall, prompt-size/token/cost, and loud extraction-failure tripwires without calling a model directly
+- persisted clock, cadence, event, and deadline watches fire internal events; one fail-closed value gate uses the model-routing placeholder to require a classified decision, risk, or saved step; unclassified and internal-only items remain logged and internal
 - all learned changes remain proposals; routing and active memory change only through the existing human review path
 
 Weekend 3 adds one narrow, tested trace plane:
@@ -47,5 +47,6 @@ Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLi
 ## Next
 
 Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+
 
 
