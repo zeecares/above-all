@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS trace_imports (
 """
 
 
+class TraceParseError(ValueError):
+    """A malformed or inconsistent transcript record."""
+
+
 @dataclass
 class ParsedTrace:
     session_id: str
@@ -68,7 +72,7 @@ def parse_claude_code_jsonl(path: Path, fallback_session_id: str | None = None) 
             except json.JSONDecodeError as exc:
                 raise ValueError(f"invalid JSON at line {line_no}: {exc.msg}") from exc
             if not isinstance(row, dict):
-                raise ValueError(f"record at line {line_no} is not an object")
+                raise TraceParseError(f"record at line {line_no} is not an object")
             session_id = row.get("sessionId") or fallback_session_id
             if not session_id:
                 raise ValueError(f"record at line {line_no} has no sessionId")
