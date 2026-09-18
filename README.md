@@ -4,24 +4,17 @@ A small, provider-neutral control plane for a personal assistant that sits above
 
 ## What works today
 
-Weekend 2 adds the session wrapper and the memory write gate:
+Weekend 3 adds one narrow, tested trace plane:
 
-- `above-all do "<intent>" -- <agent CLI command...>` dispatches a headless session with a handoff envelope (`prompt.md` + `envelope.json` in, `result.json` + `diff.patch` + logs out) and records the session and outcome in both scopes
-- `above-all work -- <agent CLI command...>` wraps a live interactive session: it regenerates the bounded `AGENT_CONTEXT.md` from approved project notes, hands the session its identity through `ABOVE_ALL_*` environment variables, and captures metadata at exit
-- exit harvest always follows the same order - session state, exit summary, memory candidates - and session exit never writes active memory, only candidates
-- a `MemoryBackend` interface (`memory_backend.py`) with `sqlite_fts` as the reference backend; `mem0_oss` is a later pluggable candidate pending trace evals
-- the candidate queue and manual review flow: `note candidates`, `note approve [--replace <id>]` (replacement keeps the old note as superseded evidence), and `note discard`
-- candidate creation failures fail loudly (event row plus stderr warning) instead of silently dropping the batch
+- a stock public Claude Code JSONL adapter normalizes messages, tool calls/results, token usage, sidechain markers, and known compaction/subagent records into the four-table trace schema
+- transcript import is idempotent by path and SHA-256 fingerprint; changed sources and parse errors fail loudly instead of overwriting history
+- wrapper exit imports only an explicit `transcript.jsonl` or `claude-code.jsonl` owned by that session; internal Claude Code and pi formats remain unverified and disabled
+- `above-all analyze` is a quiet, SQL-first scaffold that emits system/user/eval candidate queues only after enough completed outcomes; it changes no routing or memory
+- model-neutral project skills live at `.above-all/skills/<name>/SKILL.md`, shadow global skills, validate `name` and the description/when-to-use trigger, and are injected only through explicit `--skill` selection
 
-Weekend 1 established the local foundation:
+Weekend 2 provides the headless/interactive session wrapper, handoff envelope, bounded approved context, session/outcome recording in both scopes, and candidate-only exit harvesting. The `MemoryBackend` interface keeps SQLite/FTS as the reference backend, with manual approve/replace/discard and preserved superseded evidence.
 
-- one `above-all` CLI with `init`, `scope`, `route`, `note add`, and `note search`
-- a global store at `~/.above-all/` plus a project store at `.above-all/` in the nearest Git worktree
-- versioned SQLite migrations for global and project work state
-- deterministic global/project merge rules
-- Markdown notes with an OKF-lite header, FTS5 search, and staleness filtering at read time
-- an editable `routing.toml` that uses placeholder free/frontier endpoints and judgment-level rules
-- CI, pytest, and Ruff
+Weekend 1 established CLI/project resolution, migrations, the work-state plane, OKF-lite notes, FTS5 with staleness filtering, and editable routing.
 
 Run locally:
 
@@ -31,11 +24,13 @@ python -m venv .venv
 pip install -e '.[dev]'
 above-all init
 above-all scope
+above-all skills
+above-all analyze
 pytest
 ruff check .
 ```
 
-No credentials or provider-specific endpoints are committed. Copy `config/routing.example.toml` into the global store as `routing.toml` and replace placeholders locally.
+No credentials or provider-specific endpoints are committed. The supported adapter targets the stock public Claude Code format only; confirm internal-build transcript shape before enabling it.
 
 ## Storage model
 
@@ -43,5 +38,6 @@ Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLi
 
 ## Next
 
-Later weekends add trace importers, reviewed consolidation, and restrained proactivity. Their modules exist only as explicit stubs today so callers can see the intended boundaries without mistaking them for working features. Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+Weekend 4 adds reviewed consolidation and restrained proactivity. Their modules exist only as explicit stubs today so callers can see the intended boundaries without mistaking them for working features. Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+
 
