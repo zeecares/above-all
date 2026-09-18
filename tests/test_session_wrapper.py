@@ -2,6 +2,8 @@ import json
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -156,6 +158,193 @@ def test_context_excludes_candidates(repo):
     assert "Unreviewed" not in (repo.project_root / "AGENT_CONTEXT.md").read_text()
 
 
+def test_async_accepts_before_child_finishes_and_streams_large_logs(repo):
+    import time
+
+    from above_all.async_outcomes import launch_async
+
+    accepted = launch_async(
+        repo, [sys.executable, "-c", "import time; print('x'*2000000); time.sleep(1)"], "long run"
+    )
+    assert accepted.status == "accepted"
+    db = sqlite3.connect(repo.global_root / "assistant.db")
+    assert db.execute("SELECT status FROM outcomes WHERE id=?", (accepted.outcome_id,)).fetchone()[
+        0
+    ] in {"pending", "running"}
+    db.close()
+    deadline = time.time() + 5
+    while time.time() < deadline and not (accepted.session_dir / "result.json").exists():
+        time.sleep(0.05)
+    assert (accepted.session_dir / "stdout.log").stat().st_size >= 2_000_000
+
+
+def test_missing_executable_becomes_blocked_with_evidence(repo):
+    import time
+
+    from above_all.async_outcomes import launch_async
+
+    accepted = launch_async(repo, ["definitely-not-an-executable"], "cannot launch")
+    deadline = time.time() + 5
+    while time.time() < deadline and not (accepted.session_dir / "result.json").exists():
+        time.sleep(0.05)
+    result = json.loads((accepted.session_dir / "result.json").read_text())
+    assert result["status"] == "blocked" and "launch failed" in result["summary"]
+
+
+def test_reconcile_marks_killed_wrapper_blocked_and_preserves_logs(repo):
+    from above_all.async_outcomes import reconcile
+
+    session = repo.project_root / "sessions" / "dead"
+    session.mkdir(parents=True)
+    (session / "stdout.log").write_text("partial output")
+    manifest = {
+        "session_id": "dead",
+        "outcome_id": "out-dead",
+        "intent": "dead run",
+        "command": [],
+        "provider": "test",
+        "session_dir": str(session),
+        "started_at": "2026-09-18T00:00:00+00:00",
+        "scopes": [
+            [
+                str(repo.global_root / "assistant.db"),
+                GLOBAL_MIGRATIONS,
+                repo.project_root.parent.name,
+            ],
+            [str(repo.project_root / "assistant.db"), PROJECT_MIGRATIONS, None],
+        ],
+    }
+    (session / "worker.json").write_text(json.dumps(manifest))
+    (session / "worker.pid").write_text("99999999")
+    for path, migrations, project in manifest["scopes"]:
+        db = migrate(Path(path), migrations)
+        if project:
+            db.execute(
+                "INSERT INTO outcomes VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    "out-dead",
+                    project,
+                    "dead run",
+                    "running",
+                    "session:dead",
+                    "session:dead",
+                    "x",
+                    "x",
+                ),
+            )
+        else:
+            db.execute(
+                "INSERT INTO outcomes VALUES (?,?,?,?,?,?,?)",
+                ("out-dead", "dead run", "running", "session:dead", "session:dead", "x", "x"),
+            )
+        db.execute(
+            "INSERT INTO sessions(id,provider,mode,outcome_id,started_at,source_path) VALUES (?,?,?,?,?,?)",
+            ("dead", "test", "headless", "out-dead", "x", str(session)),
+        )
+        db.commit()
+        db.close()
+    assert reconcile(repo)[0]["status"] == "blocked"
+    assert (session / "stdout.log").read_text() == "partial output"
+
+
+def test_reconcile_does_not_race_pending_launch_without_pid(repo):
+    from above_all.async_outcomes import reconcile
+
+    session = repo.project_root / "sessions" / "launching"
+    session.mkdir(parents=True)
+    manifest = {
+        "session_id": "launching",
+        "outcome_id": "out-launching",
+        "intent": "launching",
+        "command": [],
+        "provider": "test",
+        "session_dir": str(session),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "scopes": [
+            [
+                str(repo.global_root / "assistant.db"),
+                GLOBAL_MIGRATIONS,
+                repo.project_root.parent.name,
+            ],
+            [str(repo.project_root / "assistant.db"), PROJECT_MIGRATIONS, None],
+        ],
+    }
+    (session / "worker.json").write_text(json.dumps(manifest))
+    for path, migrations, project in manifest["scopes"]:
+        db = migrate(Path(path), migrations)
+        if project:
+            db.execute(
+                "INSERT INTO outcomes VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    "out-launching",
+                    project,
+                    "launching",
+                    "pending",
+                    "session:launching",
+                    "session:launching",
+                    "x",
+                    "x",
+                ),
+            )
+        else:
+            db.execute(
+                "INSERT INTO outcomes VALUES (?,?,?,?,?,?,?)",
+                (
+                    "out-launching",
+                    "launching",
+                    "pending",
+                    "session:launching",
+                    "session:launching",
+                    "x",
+                    "x",
+                ),
+            )
+        db.execute(
+            "INSERT INTO sessions(id,provider,mode,outcome_id,started_at,source_path) VALUES (?,?,?,?,?,?)",
+            ("launching", "test", "headless", "out-launching", "x", str(session)),
+        )
+        db.commit()
+        db.close()
+    assert reconcile(repo) == []
+    db = sqlite3.connect(repo.global_root / "assistant.db")
+    assert (
+        db.execute("SELECT status FROM outcomes WHERE id='out-launching'").fetchone()[0]
+        == "pending"
+    )
+
+
+def test_finish_updates_global_control_plane_last(repo, monkeypatch):
+    from above_all import async_outcomes
+
+    session = repo.project_root / "sessions" / "ordering"
+    session.mkdir(parents=True)
+    manifest = {
+        "session_id": "ordering",
+        "outcome_id": "out-ordering",
+        "intent": "ordering",
+        "command": [],
+        "provider": "test",
+        "session_dir": str(session),
+        "started_at": "2026-09-18T00:00:00+00:00",
+        "scopes": [
+            [
+                str(repo.global_root / "assistant.db"),
+                GLOBAL_MIGRATIONS,
+                repo.project_root.parent.name,
+            ],
+            [str(repo.project_root / "assistant.db"), PROJECT_MIGRATIONS, None],
+        ],
+    }
+    seen = []
+    real_migrate = async_outcomes.migrate
+
+    def recording_migrate(path, migrations):
+        seen.append(Path(path))
+        return real_migrate(Path(path), migrations)
+
+    monkeypatch.setattr(async_outcomes, "migrate", recording_migrate)
+    async_outcomes._finish(manifest, "blocked", "proof")
+    assert seen == [repo.project_root / "assistant.db", repo.global_root / "assistant.db"]
 def test_project_session_overlays_global_notes_with_provenance(repo):
     global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
     global_note = create_note(
@@ -241,3 +430,4 @@ def test_headless_envelope_preserves_scope_provenance(repo):
     envelope = json.loads((result.session_dir / "envelope.json").read_text())
     assert "Source: project knowledge" in prompt and "Source: global knowledge" in prompt
     assert {item["scope"] for item in envelope["relevant_notes"]} == {"global", "project"}
+
