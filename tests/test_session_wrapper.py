@@ -345,3 +345,89 @@ def test_finish_updates_global_control_plane_last(repo, monkeypatch):
     monkeypatch.setattr(async_outcomes, "migrate", recording_migrate)
     async_outcomes._finish(manifest, "blocked", "proof")
     assert seen == [repo.project_root / "assistant.db", repo.global_root / "assistant.db"]
+def test_project_session_overlays_global_notes_with_provenance(repo):
+    global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    global_note = create_note(
+        repo.global_root / "notes",
+        "Global preference",
+        "use concise output",
+        "preference",
+        ["user:test"],
+    )
+    set_note_status(global_note, "active")
+    index_note(global_db, global_note)
+    project_db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
+    project_note = create_note(
+        repo.project_root / "notes", "Project rule", "run local tests", "procedure", ["file:test"]
+    )
+    set_note_status(project_note, "active")
+    index_note(project_db, project_note)
+    global_db.close()
+    project_db.close()
+
+    result = dispatch_headless(repo, [sys.executable, "-c", "pass"], "overlay", get_backend())
+    prompt = (result.session_dir / "prompt.md").read_text()
+    assert "Global preference" in prompt and "Project rule" in prompt
+
+
+def test_project_note_id_shadows_global_without_cross_project_leak(repo):
+    from above_all.agent_context import generate_agent_context
+
+    global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    global_note = create_note(
+        repo.global_root / "notes", "Global", "global body", "fact", ["user:test"]
+    )
+    set_note_status(global_note, "active")
+    index_note(global_db, global_note)
+    project_db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
+    shadow = repo.project_root / "notes" / global_note.name
+    shadow.parent.mkdir(exist_ok=True)
+    shadow.write_text(
+        global_note.read_text()
+        .replace("# Global", "# Project")
+        .replace("global body", "project body")
+    )
+    index_note(project_db, shadow)
+    context = generate_agent_context(
+        repo.project_root, project_db, get_backend(), global_db
+    ).read_text()
+    assert "project body" in context and "global body" not in context
+    assert "Source: project knowledge" in context
+
+
+def test_project_notes_cannot_be_starved_by_global_limit(repo):
+    from above_all.agent_context import merged_active_notes
+
+    global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    for index in range(10):
+        path = create_note(
+            repo.global_root / "notes", f"Global {index}", f"global {index}", "fact", ["user:test"]
+        )
+        set_note_status(path, "active")
+        index_note(global_db, path)
+    project_db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
+    project = create_note(
+        repo.project_root / "notes", "Project wins", "project body", "fact", ["file:test"]
+    )
+    set_note_status(project, "active")
+    index_note(project_db, project)
+    merged = merged_active_notes(global_db, project_db, get_backend(), limit=5)
+    assert merged[0]["id"] == project.stem
+    assert len(merged) == 5
+
+
+def test_headless_envelope_preserves_scope_provenance(repo):
+    global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    path = create_note(
+        repo.global_root / "notes", "Global fact", "global body", "fact", ["user:test"]
+    )
+    set_note_status(path, "active")
+    index_note(global_db, path)
+    global_db.close()
+    active_note(repo, title="Project fact", body="project body")
+    result = dispatch_headless(repo, [sys.executable, "-c", "pass"], "provenance", get_backend())
+    prompt = (result.session_dir / "prompt.md").read_text()
+    envelope = json.loads((result.session_dir / "envelope.json").read_text())
+    assert "Source: project knowledge" in prompt and "Source: global knowledge" in prompt
+    assert {item["scope"] for item in envelope["relevant_notes"]} == {"global", "project"}
+

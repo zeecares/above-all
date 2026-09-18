@@ -12,6 +12,10 @@ CREATE TABLE events (id INTEGER PRIMARY KEY, ts TEXT NOT NULL, kind TEXT NOT NUL
 """
 ]
 
+GLOBAL_MIGRATIONS.append("""CREATE TABLE notes (id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, note_type TEXT NOT NULL, sources_json TEXT NOT NULL, generated TEXT NOT NULL, verified TEXT NOT NULL, status TEXT NOT NULL, stale_after TEXT, title TEXT NOT NULL, body TEXT NOT NULL, indexed_at TEXT NOT NULL);
+CREATE VIRTUAL TABLE notes_fts USING fts5(note_id UNINDEXED, title, body, tokenize='porter unicode61');
+""")
+
 PROJECT_MIGRATIONS = [
 """CREATE TABLE outcomes (id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending','running','blocked','done','cancelled')), owner TEXT NOT NULL, source_anchor TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE sessions (id TEXT PRIMARY KEY, provider TEXT NOT NULL, mode TEXT NOT NULL, model TEXT, outcome_id TEXT, parent_session_id TEXT, started_at TEXT, ended_at TEXT, source_path TEXT, import_version TEXT, summary TEXT, tokens_in INTEGER, tokens_out INTEGER, cost_usd REAL);

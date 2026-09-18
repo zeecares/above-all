@@ -5,6 +5,7 @@ session - headless or interactive - leaves durable state behind when it dies:
 a session row in both scopes, an exit summary, and memory candidates. Exit
 harvest never writes active memory directly; it creates candidates for review.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from .agent_context import merged_active_notes
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .paths import Scopes
 from .traces import find_claude_transcript, import_claude_code_jsonl
@@ -42,16 +44,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _select_relevant_notes(db: sqlite3.Connection | None, backend) -> list[dict]:
-    if db is None:
-        return []
-    notes = backend.active_notes(db, MAX_ENVELOPE_NOTES)
+def _select_relevant_notes(
+    global_db: sqlite3.Connection, project_db: sqlite3.Connection | None, backend
+) -> list[dict]:
+    notes = merged_active_notes(global_db, project_db, backend, MAX_ENVELOPE_NOTES)
     selected, used = [], 0
     for note in notes:
-        text = f"# {note['title']}\n\n{note['body'].strip()}"
+        text = f"# {note['title']}\n\n_Source: {note['scope']} knowledge_\n\n{note['body'].strip()}"
         if used + len(text) > MAX_ENVELOPE_CHARS:
-            break
-        selected.append({"id": note["id"], "title": note["title"], "text": text})
+            continue
+        selected.append(
+            {"id": note["id"], "title": note["title"], "scope": note["scope"], "text": text}
+        )
         used += len(text)
     return selected
 
@@ -79,7 +83,9 @@ def _write_handoff(
         "intent": intent,
         "constraints": constraints,
         "source_anchors": source_anchors,
-        "relevant_notes": [{"id": n["id"], "title": n["title"]} for n in relevant_notes],
+        "relevant_notes": [
+            {"id": n["id"], "title": n["title"], "scope": n["scope"]} for n in relevant_notes
+        ],
         "return": RETURN_SHAPE,
     }
     (session_dir / "envelope.json").write_text(json.dumps(envelope, indent=2), encoding="utf-8")
@@ -217,7 +223,9 @@ def _exit_harvest(
                 warnings.append(warning)
         else:
             _record_event(
-                global_db, "trace_import_skipped", session.get("outcome_id"),
+                global_db,
+                "trace_import_skipped",
+                session.get("outcome_id"),
                 {"session_id": session["id"], "reason": "no explicit stock Claude Code transcript"},
             )
     finally:
@@ -257,7 +265,7 @@ def dispatch_headless(
     session_dir = scope_dir / "sessions" / session_id
     global_db, project_db = _open_scope_dbs(scopes)
     try:
-        relevant = _select_relevant_notes(project_db, backend)
+        relevant = _select_relevant_notes(global_db, project_db, backend)
         envelope = _write_handoff(
             session_dir,
             intent,
@@ -278,7 +286,10 @@ def dispatch_headless(
         if project_db is not None:
             _record_session(project_db, session)
             _record_event(
-                project_db, "outcome_accepted", outcome_id, {"intent": intent, "session_id": session_id}
+                project_db,
+                "outcome_accepted",
+                outcome_id,
+                {"intent": intent, "session_id": session_id},
             )
         _record_event(global_db, "session_started", outcome_id, session)
     finally:
@@ -332,15 +343,32 @@ def dispatch_headless(
                     db.execute(
                         "INSERT OR REPLACE INTO outcomes (id,project,title,status,owner,source_anchor,created_at,updated_at) "
                         "VALUES (?,?,?,?,?,?,COALESCE((SELECT created_at FROM outcomes WHERE id=?),?),?)",
-                        (outcome_id, project, intent, outcome_status, f"session:{session_id}",
-                         f"session:{session_id}", outcome_id, _now(), _now()),
+                        (
+                            outcome_id,
+                            project,
+                            intent,
+                            outcome_status,
+                            f"session:{session_id}",
+                            f"session:{session_id}",
+                            outcome_id,
+                            _now(),
+                            _now(),
+                        ),
                     )
                 else:
                     db.execute(
                         "INSERT OR REPLACE INTO outcomes (id,title,status,owner,source_anchor,created_at,updated_at) "
                         "VALUES (?,?,?,?,?,COALESCE((SELECT created_at FROM outcomes WHERE id=?),?),?)",
-                        (outcome_id, intent, outcome_status, f"session:{session_id}",
-                         f"session:{session_id}", outcome_id, _now(), _now()),
+                        (
+                            outcome_id,
+                            intent,
+                            outcome_status,
+                            f"session:{session_id}",
+                            f"session:{session_id}",
+                            outcome_id,
+                            _now(),
+                            _now(),
+                        ),
                     )
     finally:
         global_db.close()
@@ -381,7 +409,9 @@ def wrap_interactive(
     global_db, project_db = _open_scope_dbs(scopes)
     try:
         if project_db is not None:
-            context_path = generate_agent_context(scopes.project_root, project_db, backend)
+            context_path = generate_agent_context(
+                scopes.project_root, project_db, backend, global_db
+            )
         session = {
             "id": session_id,
             "provider": provider,
@@ -414,5 +444,6 @@ def wrap_interactive(
         backend,
         note_extra={"observer": "above-all", "subject": _project_name(scopes) or "global"},
     )
-    return SessionResult(session_id, "interactive", status, exit_code, session_dir, summary, warnings)
-
+    return SessionResult(
+        session_id, "interactive", status, exit_code, session_dir, summary, warnings
+    )
