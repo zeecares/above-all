@@ -170,3 +170,40 @@ def test_pollution_metrics_expose_all_tripwire_groups(tmp_path):
     assert {"admission", "recent_replacements_or_contradictions", "retrieval_recall", "extraction", "prompt_memory_tokens_per_completed_outcome"} <= metrics.keys()
     assert metrics["retrieval_recall"]["ignored_or_corrected"] == 1
     assert metrics["extraction"] == {"failures_or_empty_batches": 1, "visible": True}
+
+
+
+def test_operational_runner_sweeps_fires_and_is_restart_idempotent(tmp_path):
+    from above_all.operations import run_maintenance
+
+    root, db = scope(tmp_path)
+    old = note(root / "notes" / "old.md", "old", stale_after="2026-01-01")
+    index_note(db, old)
+    watch = create_watch(db, "clock", {"at": "now"}, "2026-01-01T00:00:00+00:00")
+    first = run_maintenance(db, root)
+    assert first["expiry"]["expired"] == ["old"]
+    assert first["watches"]["fired"][0]["watch_id"] == watch
+    db.close()
+    db = migrate(root / "assistant.db", PROJECT_MIGRATIONS)
+    second = run_maintenance(db, root)
+    assert second["expiry"]["expired"] == [] and second["watches"]["fired"] == []
+
+
+def test_cli_reaches_sweep_weekly_watch_and_explicit_apply(tmp_path, monkeypatch, capsys):
+    import subprocess
+
+    from above_all.cli import main
+
+    repo = tmp_path / "repo"; repo.mkdir(); subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    monkeypatch.chdir(repo); monkeypatch.setenv("ABOVE_ALL_HOME", str(tmp_path / "home"))
+    main(["init"])
+    capsys.readouterr()
+    assert main(["watch", "create", "clock", '{"at":"later"}', "--next-fire", "2026-01-01T00:00:00+00:00"]) == 0
+    assert "id" in json.loads(capsys.readouterr().out)
+    assert main(["consolidate", "sweep"]) == 0
+    assert "expired" in json.loads(capsys.readouterr().out)
+    assert main(["consolidate", "weekly", "--max-candidates", "1"]) == 0
+    changeset = json.loads(capsys.readouterr().out)["path"]
+    with pytest.raises(ValueError, match="explicit approve"):
+        main(["consolidate", "apply", changeset])
+    assert main(["consolidate", "apply", changeset, "--approve"]) == 0
