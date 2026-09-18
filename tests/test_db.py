@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from above_all.db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, merge_rows, migrate
 
 
@@ -131,3 +133,18 @@ def test_global_and_project_orders_stay_fixed():
     assert "CREATE TABLE IF NOT EXISTS notes" in GLOBAL_MIGRATIONS[2]
     assert "CREATE TABLE IF NOT EXISTS notes" in PROJECT_MIGRATIONS[0]
     assert "CREATE TABLE IF NOT EXISTS watches" in PROJECT_MIGRATIONS[1]
+
+
+
+def test_each_migration_and_marker_commit_atomically(tmp_path):
+    path = tmp_path / "atomic.db"
+    broken = [
+        "CREATE TABLE durable (id INTEGER PRIMARY KEY);"
+        "INSERT INTO missing_table VALUES (1);"
+    ]
+    with pytest.raises(sqlite3.OperationalError):
+        migrate(path, broken)
+    db = sqlite3.connect(path)
+    assert "durable" not in _table_names(db)
+    assert _applied_versions(db) == set()
+    db.close()
