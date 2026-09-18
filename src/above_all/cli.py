@@ -133,11 +133,13 @@ def main(argv: list[str] | None = None) -> int:
         if not cmd:
             raise SystemExit("no interactive command: pass `-- <cmd...>` or configure agent.toml")
         selected = load_selected(scopes.global_root, scopes.project_root, args.skill)
-        if selected:
-            skill_context = scopes.project_root / "SELECTED_SKILLS.md" if scopes.project_root else scopes.global_root / "SELECTED_SKILLS.md"
-            skill_context.write_text("\n\n".join(f"# {x.name}\n\n{x.body}" for x in selected) + "\n", encoding="utf-8")
+        skill_text = "\n\n".join(f"# {x.name}\n\n{x.body}" for x in selected)
         result = wrap_interactive(
-            scopes, cmd, backend, provider=config.get("agent_cli", {}).get("provider", "unknown")
+            scopes,
+            cmd,
+            backend,
+            provider=config.get("agent_cli", {}).get("provider", "unknown"),
+            skill_text=skill_text,
         )
         print(json.dumps({"session_id": result.session_id, "status": result.status,
                           "exit_code": result.exit_code, "summary": result.summary,
