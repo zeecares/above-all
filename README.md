@@ -31,12 +31,16 @@ python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 above-all init
+# Or explicitly share reviewed notes/context while private state stays ignored:
+above-all init --share-approved
 above-all scope
 above-all skills
 above-all analyze
 pytest
 ruff check .
 ```
+
+Project init writes `.above-all/.gitignore`. The default keeps the whole project scope local. `--share-approved` explicitly allows only reviewed notes and generated context while databases, candidates, sessions, traces, logs, and selected-skill files stay ignored. Init refuses to proceed if private state is already tracked.
 
 No credentials or provider-specific endpoints are committed. The supported adapter targets the stock public Claude Code format only; confirm internal-build transcript shape before enabling it.
 
