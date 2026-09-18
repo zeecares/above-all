@@ -7,6 +7,8 @@ import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
+from .routing import classify_value
+
 ALLOWED_VALUE_CATEGORIES = {"decision", "risk", "saved_step"}
 ValueClassifier = Callable[[str, dict], dict | None]
 
@@ -52,14 +54,10 @@ def fire_watch(db: sqlite3.Connection, watch_id: str, payload: dict, value: str 
     return cursor.lastrowid
 
 
-def classify_value_placeholder(value: str, payload: dict) -> dict | None:
-    """Model-routing seam. Deliberately fail closed until a routed classifier is configured."""
-    return None
-
 
 def value_gate(db: sqlite3.Connection, classifier: ValueClassifier | None = None) -> dict:
     """Surface only classifier-confirmed decision/risk/saved-step value; otherwise log internally."""
-    classifier = classifier or classify_value_placeholder
+    classifier = classifier or classify_value
     surfaced, internal = [], []
     rows = db.execute("SELECT e.id,e.watch_id,e.payload_json,e.value,w.interruption_policy FROM proactive_events e JOIN watches w ON w.id=e.watch_id WHERE e.status='pending' ORDER BY e.id").fetchall()
     with db:

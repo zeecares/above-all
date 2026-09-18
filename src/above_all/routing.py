@@ -37,3 +37,12 @@ def route(data: dict, level: str, signals: set[str] | None = None) -> Route:
             break
     model = data["models"][tier]
     return Route(tier, model["endpoint"], model["model"])
+
+
+
+def classify_value(value: str, payload: dict) -> dict | None:
+    """Placeholder routing seam for a future model-backed value classifier.
+
+    The control plane fails closed until a configured provider implements this call.
+    """
+    return None

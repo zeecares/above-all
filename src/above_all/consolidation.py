@@ -133,6 +133,12 @@ def _validate(payload: dict, scope_dir: Path) -> list[dict]:
         if change["action"] == "trace_candidate":
             if not isinstance(change.get("proposal"), dict):
                 raise ValueError("malformed trace candidate")
+            sources = [x for x in payload.get("trace_analysis_inputs", []) if x.get("path", "").endswith(change.get("queue", "") + ".json")]
+            if not sources:
+                raise ValueError("trace candidate has no bound queue source")
+            source = Path(sources[0]["path"])
+            if not source.is_file() or _sha(source) != change.get("source_sha256") or _sha(source) != sources[0].get("sha256"):
+                raise ValueError(f"trace queue snapshot changed or disappeared: {source}")
             continue
         cid = change.get("candidate_id")
         candidate = scope_dir / "candidates" / f"{cid}.md"
@@ -216,11 +222,13 @@ def _table_exists(db: sqlite3.Connection, name: str) -> bool:
     return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
-def _event_count(db: sqlite3.Connection, kinds: tuple[str, ...]) -> int:
+def _event_count(db: sqlite3.Connection, kinds: tuple[str, ...], since: str | None = None) -> int:
     if not _table_exists(db, "events"):
         return 0
     marks = ",".join("?" for _ in kinds)
-    return db.execute(f"SELECT COUNT(*) FROM events WHERE kind IN ({marks})", kinds).fetchone()[0]
+    suffix = " AND ts >= ?" if since else ""
+    params = (*kinds, since) if since else kinds
+    return db.execute(f"SELECT COUNT(*) FROM events WHERE kind IN ({marks}){suffix}", params).fetchone()[0]
 
 
 def pollution_metrics(db: sqlite3.Connection, scope_dir: Path) -> dict:
@@ -232,10 +240,11 @@ def pollution_metrics(db: sqlite3.Connection, scope_dir: Path) -> dict:
     if _table_exists(db, "trace_imports"):
         failures += db.execute("SELECT COUNT(*) FROM trace_imports WHERE status='failed'").fetchone()[0]
     context = scope_dir / "AGENT_CONTEXT.md"
+    since_30d = (datetime.now(timezone.utc) - __import__("datetime").timedelta(days=30)).isoformat()
     return {
         "notes_by_status": statuses,
         "admission": {"candidates_created": _event_count(db, ("candidate_created",)), "approved": _event_count(db, ("candidate_approved",)), "later_retrieved": retrievals},
-        "recent_replacements_or_contradictions": _event_count(db, ("note_replaced", "note_contradiction")),
+        "recent_replacements_or_contradictions": _event_count(db, ("note_replaced", "note_contradiction"), since_30d),
         "retrieval_recall": {"retrieved": retrievals, "ignored_or_corrected": ignored, "rate": None if retrievals == 0 else (retrievals - ignored) / retrievals},
         "extraction": {"failures_or_empty_batches": failures, "visible": True},
         "candidate_files": len(list((scope_dir / "candidates").glob("*.md"))) if (scope_dir / "candidates").is_dir() else 0,
