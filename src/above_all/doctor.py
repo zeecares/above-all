@@ -110,14 +110,17 @@ def _routing_checks(scopes: Scopes) -> list[dict]:
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return [_check("routing", "fail", f"routing.toml invalid: {exc}",
                        f"fix {path}: every level must reference a defined tier")]
-    placeholders = [
+    invalid_models = [
         tier for tier, model in data.get("models", {}).items()
-        if PLACEHOLDER_ENDPOINT_MARK in str(model.get("endpoint", ""))
+        if not str(model.get("endpoint", "")).strip()
+        or not str(model.get("model", "")).strip()
+        or PLACEHOLDER_ENDPOINT_MARK in str(model.get("endpoint", ""))
     ]
-    if placeholders:
+    if invalid_models:
         return [_check(
             "routing", "fail",
-            f"routing.toml still uses placeholder endpoints for: {', '.join(placeholders)}",
+            f"routing.toml has missing or placeholder endpoint/model values for: "
+            f"{', '.join(invalid_models)}",
             f"edit {path}: map each tier to a real model gateway endpoint and model",
         )]
     return [_check("routing", "ok", f"{len(data.get('models', {}))} tiers configured")]
@@ -282,11 +285,15 @@ def run_status(scopes: Scopes) -> dict:
         )
     else:
         report["outcomes"] = {}
-    report["sessions"] = db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-    tokens = db.execute(
-        "SELECT COALESCE(SUM(tokens_in),0), COALESCE(SUM(tokens_out),0) FROM sessions"
-    ).fetchone()
-    report["tokens_in"], report["tokens_out"] = tokens[0], tokens[1]
+    if _table_exists(db, "sessions"):
+        report["sessions"] = db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        tokens = db.execute(
+            "SELECT COALESCE(SUM(tokens_in),0), COALESCE(SUM(tokens_out),0) FROM sessions"
+        ).fetchone()
+        report["tokens_in"], report["tokens_out"] = tokens[0], tokens[1]
+    else:
+        report["sessions"] = 0
+        report["tokens_in"], report["tokens_out"] = 0, 0
     now = _now_iso()
     if _table_exists(db, "watches"):
         report["watches"] = {
