@@ -6,11 +6,11 @@ A small, provider-neutral control plane for a personal assistant that sits above
 
 Weekend 3 adds one narrow, tested trace plane:
 
-- a stock public Claude Code JSONL adapter normalizes messages, tool calls/results, token usage, active-branch messages, tool calls/results, token usage, and recognizes known compaction/subagent marker records into the four-table trace schema
+- a stock public Claude Code JSONL adapter normalizes messages, tool calls/results, token usage, sidechain markers, and known compaction/subagent records into the four-table trace schema
 - transcript import is idempotent by path and SHA-256 fingerprint; changed sources and parse errors fail loudly instead of overwriting history
 - wrapper exit imports only an explicit `transcript.jsonl` or `claude-code.jsonl` owned by that session; internal Claude Code and pi formats remain unverified and disabled
 - `above-all analyze` is a quiet, SQL-first scaffold that emits system/user/eval candidate queues only after enough completed outcomes; it changes no routing or memory
-- model-neutral project skills live at `.above-all/skills/<name>/SKILL.md`, shadow global skills, validate `name` and the description/when-to-use trigger, and are injected through a session-scoped file only after explicit `--skill` selection
+- model-neutral project skills live at `.above-all/skills/<name>/SKILL.md`, shadow global skills, validate `name` and the description/when-to-use trigger, and are injected only through explicit `--skill` selection
 
 Weekend 2 provides the headless/interactive session wrapper, handoff envelope, bounded approved context, session/outcome recording in both scopes, and candidate-only exit harvesting. The `MemoryBackend` interface keeps SQLite/FTS as the reference backend, with manual approve/replace/discard and preserved superseded evidence.
 
@@ -39,4 +39,5 @@ Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLi
 ## Next
 
 Weekend 4 adds reviewed consolidation and restrained proactivity. Their modules exist only as explicit stubs today so callers can see the intended boundaries without mistaking them for working features. Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+
 

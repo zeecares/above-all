@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .paths import Scopes
+from .traces import find_claude_transcript, import_claude_code_jsonl
 
 RETURN_SHAPE = ["outcome", "evidence", "changes", "blockers"]
 MAX_ENVELOPE_NOTES = 5
@@ -169,6 +170,7 @@ def _exit_harvest(
     summary: str,
     backend,
     note_extra: dict | None = None,
+    trace_path: Path | None = None,
 ) -> list[str]:
     """Exit harvest, in order: session state -> summary -> candidates -> traces.
 
@@ -203,13 +205,21 @@ def _exit_harvest(
             _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
             print(f"WARNING: {warning}", file=sys.stderr)
             warnings.append(warning)
-        # Trace import is the Weekend 3 adapter boundary; record the skip explicitly.
-        _record_event(
-            global_db,
-            "trace_import_skipped",
-            session.get("outcome_id"),
-            {"session_id": session["id"], "reason": "no verified adapter yet"},
-        )
+        trace_path = trace_path or find_claude_transcript(Path(session["source_path"]))
+        if trace_path and session.get("provider") == "claude_code":
+            try:
+                result = import_claude_code_jsonl(global_db, trace_path, session["id"])
+                _record_event(global_db, "trace_imported", session.get("outcome_id"), result)
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                warning = f"trace import failed for session {session['id']}: {exc}"
+                _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
+                print(f"WARNING: {warning}", file=sys.stderr)
+                warnings.append(warning)
+        else:
+            _record_event(
+                global_db, "trace_import_skipped", session.get("outcome_id"),
+                {"session_id": session["id"], "reason": "no explicit stock Claude Code transcript"},
+            )
     finally:
         global_db.close()
         if project_db is not None:
@@ -354,6 +364,7 @@ def wrap_interactive(
     command: list[str],
     backend,
     provider: str = "unknown",
+    skill_text: str = "",
 ) -> SessionResult:
     """Wrap a live agent-CLI session: preload project knowledge, harvest on exit."""
     from .agent_context import generate_agent_context
@@ -363,6 +374,10 @@ def wrap_interactive(
     session_dir = scope_dir / "sessions" / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     context_path = None
+    skills_path = None
+    if skill_text:
+        skills_path = session_dir / "SELECTED_SKILLS.md"
+        skills_path.write_text(skill_text.rstrip() + "\n", encoding="utf-8")
     global_db, project_db = _open_scope_dbs(scopes)
     try:
         if project_db is not None:
@@ -384,7 +399,10 @@ def wrap_interactive(
             project_db.close()
 
     started = time.monotonic()
-    exit_code = subprocess.call(command, env=_session_env(session_id, session_dir))
+    env = _session_env(session_id, session_dir)
+    if skills_path:
+        env["ABOVE_ALL_SKILLS"] = str(skills_path)
+    exit_code = subprocess.call(command, env=env)
     duration = time.monotonic() - started
     status = "done" if exit_code == 0 else "failed"
     context_note = f"; context preloaded from {context_path}" if context_path else ""
@@ -397,3 +415,4 @@ def wrap_interactive(
         note_extra={"observer": "above-all", "subject": _project_name(scopes) or "global"},
     )
     return SessionResult(session_id, "interactive", status, exit_code, session_dir, summary, warnings)
+
