@@ -51,8 +51,12 @@ def test_headless_dispatch_records_session_in_both_scopes(repo):
 
 def test_handoff_envelope_and_prompt_are_written(repo):
     result = dispatch_headless(
-        repo, [sys.executable, "-c", "pass"], "raw intent here",
-        get_backend(), constraints=["no network"], source_anchors=["file:app.py"],
+        repo,
+        [sys.executable, "-c", "pass"],
+        "raw intent here",
+        get_backend(),
+        constraints=["no network"],
+        source_anchors=["file:app.py"],
     )
     envelope = json.loads((result.session_dir / "envelope.json").read_text())
     assert envelope["intent"] == "raw intent here"  # raw intent, not a paraphrase
@@ -105,9 +109,7 @@ def test_exit_creates_candidate_never_active_memory(repo):
 def test_outcome_row_reflects_exit(repo):
     result = dispatch_headless(repo, [sys.executable, "-c", "pass"], "ship it", get_backend())
     db = sqlite3.connect(repo.project_root / "assistant.db")
-    row = db.execute(
-        "SELECT status,owner FROM outcomes WHERE title='ship it'"
-    ).fetchone()
+    row = db.execute("SELECT status,owner FROM outcomes WHERE title='ship it'").fetchone()
     db.close()
     assert row[0] == "done" and row[1] == f"session:{result.session_id}"
 
@@ -119,9 +121,7 @@ def test_interactive_wrap_preloads_context_and_records(repo):
     context = (repo.project_root / "AGENT_CONTEXT.md").read_text()
     assert "Project convention" in context  # approved notes preloaded
     db = sqlite3.connect(repo.project_root / "assistant.db")
-    mode = db.execute(
-        "SELECT mode FROM sessions WHERE id=?", (result.session_id,)
-    ).fetchone()[0]
+    mode = db.execute("SELECT mode FROM sessions WHERE id=?", (result.session_id,)).fetchone()[0]
     db.close()
     assert mode == "interactive"
 
@@ -132,7 +132,9 @@ def test_interactive_skill_context_is_session_scoped_and_absent_when_unselected(
         "import os,pathlib;"
         f"p=os.environ.get('ABOVE_ALL_SKILLS');pathlib.Path(r'{marker}').write_text(pathlib.Path(p).read_text() if p else 'NONE')"
     )
-    first = wrap_interactive(repo, [sys.executable, "-c", script], get_backend(), skill_text="# pr\n\nUse it.")
+    first = wrap_interactive(
+        repo, [sys.executable, "-c", script], get_backend(), skill_text="# pr\n\nUse it."
+    )
     assert (first.session_dir / "SELECTED_SKILLS.md").is_file()
     assert marker.read_text() == "# pr\n\nUse it.\n"
     second = wrap_interactive(repo, [sys.executable, "-c", script], get_backend())
@@ -144,22 +146,35 @@ def test_interactive_skill_context_is_session_scoped_and_absent_when_unselected(
 def test_context_excludes_candidates(repo):
     backend = get_backend()
     backend.create_candidate(
-        repo.project_root, title="Unreviewed", body="drafty", note_type="fact",
+        repo.project_root,
+        title="Unreviewed",
+        body="drafty",
+        note_type="fact",
         sources=["session:s1"],
     )
     wrap_interactive(repo, [sys.executable, "-c", "pass"], backend)
     assert "Unreviewed" not in (repo.project_root / "AGENT_CONTEXT.md").read_text()
 
 
-
 def test_project_session_overlays_global_notes_with_provenance(repo):
     global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
-    global_note = create_note(repo.global_root / "notes", "Global preference", "use concise output", "preference", ["user:test"])
-    set_note_status(global_note, "active"); index_note(global_db, global_note)
+    global_note = create_note(
+        repo.global_root / "notes",
+        "Global preference",
+        "use concise output",
+        "preference",
+        ["user:test"],
+    )
+    set_note_status(global_note, "active")
+    index_note(global_db, global_note)
     project_db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
-    project_note = create_note(repo.project_root / "notes", "Project rule", "run local tests", "procedure", ["file:test"])
-    set_note_status(project_note, "active"); index_note(project_db, project_note)
-    global_db.close(); project_db.close()
+    project_note = create_note(
+        repo.project_root / "notes", "Project rule", "run local tests", "procedure", ["file:test"]
+    )
+    set_note_status(project_note, "active")
+    index_note(project_db, project_note)
+    global_db.close()
+    project_db.close()
 
     result = dispatch_headless(repo, [sys.executable, "-c", "pass"], "overlay", get_backend())
     prompt = (result.session_dir / "prompt.md").read_text()
@@ -170,12 +185,59 @@ def test_project_note_id_shadows_global_without_cross_project_leak(repo):
     from above_all.agent_context import generate_agent_context
 
     global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
-    global_note = create_note(repo.global_root / "notes", "Global", "global body", "fact", ["user:test"])
-    set_note_status(global_note, "active"); index_note(global_db, global_note)
+    global_note = create_note(
+        repo.global_root / "notes", "Global", "global body", "fact", ["user:test"]
+    )
+    set_note_status(global_note, "active")
+    index_note(global_db, global_note)
     project_db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
     shadow = repo.project_root / "notes" / global_note.name
-    shadow.parent.mkdir(exist_ok=True); shadow.write_text(global_note.read_text().replace("# Global", "# Project").replace("global body", "project body"))
+    shadow.parent.mkdir(exist_ok=True)
+    shadow.write_text(
+        global_note.read_text()
+        .replace("# Global", "# Project")
+        .replace("global body", "project body")
+    )
     index_note(project_db, shadow)
-    context = generate_agent_context(repo.project_root, project_db, get_backend(), global_db).read_text()
+    context = generate_agent_context(
+        repo.project_root, project_db, get_backend(), global_db
+    ).read_text()
     assert "project body" in context and "global body" not in context
     assert "Source: project knowledge" in context
+
+
+def test_project_notes_cannot_be_starved_by_global_limit(repo):
+    from above_all.agent_context import merged_active_notes
+
+    global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    for index in range(10):
+        path = create_note(
+            repo.global_root / "notes", f"Global {index}", f"global {index}", "fact", ["user:test"]
+        )
+        set_note_status(path, "active")
+        index_note(global_db, path)
+    project_db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
+    project = create_note(
+        repo.project_root / "notes", "Project wins", "project body", "fact", ["file:test"]
+    )
+    set_note_status(project, "active")
+    index_note(project_db, project)
+    merged = merged_active_notes(global_db, project_db, get_backend(), limit=5)
+    assert merged[0]["id"] == project.stem
+    assert len(merged) == 5
+
+
+def test_headless_envelope_preserves_scope_provenance(repo):
+    global_db = migrate(repo.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    path = create_note(
+        repo.global_root / "notes", "Global fact", "global body", "fact", ["user:test"]
+    )
+    set_note_status(path, "active")
+    index_note(global_db, path)
+    global_db.close()
+    active_note(repo, title="Project fact", body="project body")
+    result = dispatch_headless(repo, [sys.executable, "-c", "pass"], "provenance", get_backend())
+    prompt = (result.session_dir / "prompt.md").read_text()
+    envelope = json.loads((result.session_dir / "envelope.json").read_text())
+    assert "Source: project knowledge" in prompt and "Source: global knowledge" in prompt
+    assert {item["scope"] for item in envelope["relevant_notes"]} == {"global", "project"}
