@@ -4,6 +4,14 @@ A small, provider-neutral control plane for a personal assistant that sits above
 
 ## What works today
 
+Weekend 4 adds reviewed consolidation and restrained proactivity:
+
+- a daily expiry sweep marks stale active notes `needs-review`, removes them from FTS, and never touches candidates
+- the bounded weekly pass proposes a changeset for duplicates, contradictions, reviewed promotions, and Weekend 3 trace-analysis queues; it cannot apply without explicit approval and preserves superseded/contradictory evidence
+- pollution metrics expose admission/use, recent replacement/contradiction, retrieval-recall, prompt-size/token/cost, and loud extraction-failure tripwires without calling a model directly
+- persisted clock, cadence, event, and deadline watches fire internal events; one fail-closed value gate uses the model-routing placeholder to require a classified decision, risk, or saved step; unclassified and internal-only items remain logged and internal
+- all learned changes remain proposals; routing and active memory change only through the existing human review path
+
 Weekend 3 adds one narrow, tested trace plane:
 
 - a stock public Claude Code JSONL adapter normalizes messages, tool calls/results, token usage, active-branch messages, tool calls/results, token usage, and recognizes known compaction/subagent marker records into the four-table trace schema
@@ -38,5 +46,7 @@ Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLi
 
 ## Next
 
-Weekend 4 adds reviewed consolidation and restrained proactivity. Their modules exist only as explicit stubs today so callers can see the intended boundaries without mistaking them for working features. Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+
+
 

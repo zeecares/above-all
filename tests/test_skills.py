@@ -29,3 +29,4 @@ def test_missing_trigger_fails_loudly(tmp_path):
 def test_unknown_selected_skill_fails_loudly(tmp_path):
     with pytest.raises(ValueError, match="unknown skill"):
         load_selected(tmp_path, None, ["missing"])
+
