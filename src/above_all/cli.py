@@ -215,13 +215,19 @@ def main(argv: list[str] | None = None) -> int:
         elif args.note_command == "discard":
             print(backend.discard(scopes.project_root, args.candidate_id))
         else:
+            global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
             db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
-            print(generate_agent_context(scopes.project_root, db, backend))
+            try:
+                print(generate_agent_context(scopes.project_root, db, backend, global_db))
+            finally:
+                global_db.close()
+                db.close()
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
