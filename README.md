@@ -40,4 +40,3 @@ Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLi
 
 Weekend 4 adds reviewed consolidation and restrained proactivity. Their modules exist only as explicit stubs today so callers can see the intended boundaries without mistaking them for working features. Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
 
-
