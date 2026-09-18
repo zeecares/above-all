@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .paths import Scopes
+from .traces import find_claude_transcript, import_claude_code_jsonl
 
 RETURN_SHAPE = ["outcome", "evidence", "changes", "blockers"]
 MAX_ENVELOPE_NOTES = 5
@@ -169,6 +170,7 @@ def _exit_harvest(
     summary: str,
     backend,
     note_extra: dict | None = None,
+    trace_path: Path | None = None,
 ) -> list[str]:
     """Exit harvest, in order: session state -> summary -> candidates -> traces.
 
@@ -203,13 +205,21 @@ def _exit_harvest(
             _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
             print(f"WARNING: {warning}", file=sys.stderr)
             warnings.append(warning)
-        # Trace import is the Weekend 3 adapter boundary; record the skip explicitly.
-        _record_event(
-            global_db,
-            "trace_import_skipped",
-            session.get("outcome_id"),
-            {"session_id": session["id"], "reason": "no verified adapter yet"},
-        )
+        trace_path = trace_path or find_claude_transcript(Path(session["source_path"]))
+        if trace_path and session.get("provider") == "claude_code":
+            try:
+                result = import_claude_code_jsonl(global_db, trace_path, session["id"])
+                _record_event(global_db, "trace_imported", session.get("outcome_id"), result)
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                warning = f"trace import failed for session {session['id']}: {exc}"
+                _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
+                print(f"WARNING: {warning}", file=sys.stderr)
+                warnings.append(warning)
+        else:
+            _record_event(
+                global_db, "trace_import_skipped", session.get("outcome_id"),
+                {"session_id": session["id"], "reason": "no explicit stock Claude Code transcript"},
+            )
     finally:
         global_db.close()
         if project_db is not None:
@@ -397,3 +407,4 @@ def wrap_interactive(
         note_extra={"observer": "above-all", "subject": _project_name(scopes) or "global"},
     )
     return SessionResult(session_id, "interactive", status, exit_code, session_dir, summary, warnings)
+
