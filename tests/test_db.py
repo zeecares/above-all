@@ -139,8 +139,10 @@ def test_global_and_project_orders_stay_fixed():
 def test_each_migration_and_marker_commit_atomically(tmp_path):
     path = tmp_path / "atomic.db"
     broken = [
-        "CREATE TABLE durable (id INTEGER PRIMARY KEY);"
-        "INSERT INTO missing_table VALUES (1);"
+        (
+            "CREATE TABLE durable (id INTEGER PRIMARY KEY);"
+            "INSERT INTO missing_table VALUES (1);"
+        )
     ]
     with pytest.raises(sqlite3.OperationalError):
         migrate(path, broken)
