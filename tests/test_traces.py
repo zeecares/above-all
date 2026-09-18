@@ -95,7 +95,7 @@ def test_analysis_emits_review_queues_only_without_touching_memory_or_routing(tm
     db.executemany("INSERT INTO outcomes VALUES (?, 'done')", [("o1",), ("o2",)])
     db.execute("CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)")
     db.execute("INSERT INTO notes VALUES ('n1','keep me')")
-    routing = tmp_path / "routing.toml"; tmp_path.mkdir(); routing.write_text("[routing]\n")
+    routing = tmp_path / "routing.toml"; routing.write_text("[routing]\n")
     from above_all.traces import ensure_trace_schema
     ensure_trace_schema(db)
     db.executemany("INSERT INTO trace_tool_calls VALUES (?,?,?,?,?,?,?,?)", [("t1","s1",1,"Bash",None,"failed",None,None), ("t2","s2",1,"Bash",None,"failed",None,None)])
