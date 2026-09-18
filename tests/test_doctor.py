@@ -194,3 +194,32 @@ def test_doctor_handles_legacy_untracked_store(world: World):
     assert "predates" in store["detail"]
     status = world.cli("status", "--json", check=False)
     assert "Traceback" not in status.stderr
+
+
+
+def test_doctor_rejects_missing_endpoint_or_model(world: World):
+    world.cli("init")
+    _configure_real(world)
+    routing = (world.home / "routing.toml").read_text()
+    (world.home / "routing.toml").write_text(
+        routing.replace('endpoint = "https://gateway.internal.corp/v1"', 'endpoint = ""'),
+        encoding="utf-8",
+    )
+    report = json.loads(world.cli("doctor", "--json", check=False).stdout)
+    check = next(c for c in report["checks"] if c["name"] == "routing")
+    assert check["status"] == "fail"
+    assert "missing or placeholder" in check["detail"]
+
+
+def test_status_handles_empty_legacy_store_without_crashing(world: World):
+    import sqlite3
+
+    world.home.mkdir(parents=True)
+    sqlite3.connect(world.home / "assistant.db").close()
+    result = world.cli("status", "--json", check=False)
+    assert result.returncode == 0
+    assert "Traceback" not in result.stderr
+    report = json.loads(result.stdout)
+    assert report["sessions"] == 0
+    assert report["tokens_in"] == 0
+    assert report["tokens_out"] == 0
