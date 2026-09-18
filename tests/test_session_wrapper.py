@@ -126,6 +126,21 @@ def test_interactive_wrap_preloads_context_and_records(repo):
     assert mode == "interactive"
 
 
+def test_interactive_skill_context_is_session_scoped_and_absent_when_unselected(repo, tmp_path):
+    marker = tmp_path / "skills.txt"
+    script = (
+        "import os,pathlib;"
+        f"p=os.environ.get('ABOVE_ALL_SKILLS');pathlib.Path(r'{marker}').write_text(pathlib.Path(p).read_text() if p else 'NONE')"
+    )
+    first = wrap_interactive(repo, [sys.executable, "-c", script], get_backend(), skill_text="# pr\n\nUse it.")
+    assert (first.session_dir / "SELECTED_SKILLS.md").is_file()
+    assert marker.read_text() == "# pr\n\nUse it.\n"
+    second = wrap_interactive(repo, [sys.executable, "-c", script], get_backend())
+    assert marker.read_text() == "NONE"
+    assert not (second.session_dir / "SELECTED_SKILLS.md").exists()
+    assert not (repo.project_root / "SELECTED_SKILLS.md").exists()
+
+
 def test_context_excludes_candidates(repo):
     backend = get_backend()
     backend.create_candidate(
