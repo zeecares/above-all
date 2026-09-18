@@ -33,7 +33,7 @@ def test_daily_expiry_marks_needs_review_and_never_touches_candidate(tmp_path):
 def test_weekly_is_bounded_and_apply_requires_explicit_approve(tmp_path):
     root, db = scope(tmp_path)
     active = note(root / "notes" / "a.md", "alpha beta"); index_note(db, active)
-    duplicate = create_candidate(root / "candidates", "Dup", "# Fact\n\nalpha beta", "fact", ["trace:t1"])
+    duplicate = create_candidate(root / "candidates", "Dup", "alpha beta", "fact", ["trace:t1"])
     reviewed = create_candidate(root / "candidates", "New", "gamma delta", "fact", ["trace:t2"])
     reviewed.write_text(reviewed.read_text().replace("status: candidate", "status: reviewed"))
     analysis = tmp_path / "analysis"; analysis.mkdir(); (analysis / "system-candidates.json").write_text("[]\n")
@@ -67,7 +67,7 @@ def test_clock_and_cadence_watches_persist_and_fire_internal_events(tmp_path):
     db = migrate(tmp_path / "global.db", GLOBAL_MIGRATIONS)
     clock = create_watch(db, "clock", {"at": "2026-09-18T09:00:00Z"}, "2026-09-18T09:00:00+00:00")
     cadence = create_watch(db, "cadence", {"minutes": 60}, "2026-09-18T09:00:00+00:00")
-    assert [x["id"] for x in due_watches(db, "2026-09-18T10:00:00+00:00")] == [cadence, clock]
+    assert {x["id"] for x in due_watches(db, "2026-09-18T10:00:00+00:00")} == {cadence, clock}
     now = datetime(2026, 9, 18, 10, tzinfo=timezone.utc)
     fire_watch(db, clock, {"risk": "deadline"}, value="avoids a missed deadline", now=now)
     fire_watch(db, cadence, {"changed": False}, now=now)

@@ -7,6 +7,13 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+
+def _claim(body: str) -> str:
+    lines = body.strip().splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+    return "\n".join(lines).strip().casefold()
+
 from .notes import approve_candidate, index_note, parse_note, set_note_status
 
 
@@ -46,21 +53,21 @@ def propose_weekly(
 ) -> Path:
     """Write a bounded changeset. This function never applies memory changes."""
     active = db.execute("SELECT id,title,body,path FROM notes WHERE status='active'").fetchall()
-    active_by_body = {row[2].strip().casefold(): row for row in active}
-    active_tokens = {row[0]: set(row[2].casefold().split()) for row in active}
+    active_by_body = {_claim(row[2]): row for row in active}
+    active_tokens = {row[0]: set(_claim(row[2]).split()) for row in active}
     changes = []
     for record in _candidate_records(scope_dir)[:max_candidates]:
         note = record["note"]
         status = note.metadata["status"]
         if status not in {"candidate", "reviewed"}:
             continue
-        normalized = note.body.strip().casefold()
+        normalized = _claim(note.body)
         if normalized in active_by_body:
             changes.append({"action": "reject_duplicate", "candidate_id": record["id"], "active_id": active_by_body[normalized][0]})
             continue
         words = set(normalized.split())
         overlap = [note_id for note_id, tokens in active_tokens.items() if tokens and len(words & tokens) / max(1, min(len(words), len(tokens))) >= 0.6]
-        contradiction = bool(overlap) and any(token in words for token in {"not", "never", "instead", "changed"})
+        contradiction = bool(overlap) and any(token in words for token in ("not", "never", "instead", "changed"))
         if contradiction:
             changes.append({"action": "flag_contradiction", "candidate_id": record["id"], "active_ids": sorted(overlap)})
         elif status == "reviewed":
@@ -99,6 +106,7 @@ def apply_changeset(db: sqlite3.Connection, scope_dir: Path, path: Path, approve
         candidate_id = change["candidate_id"]
         candidate = scope_dir / "candidates" / f"{candidate_id}.md"
         if change["action"] == "promote":
+            set_note_status(candidate, "candidate")
             approve_candidate(db, scope_dir, candidate_id)
             applied.append(change)
         elif change["action"] == "reject_duplicate":
