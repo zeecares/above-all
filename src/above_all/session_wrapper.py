@@ -364,6 +364,7 @@ def wrap_interactive(
     command: list[str],
     backend,
     provider: str = "unknown",
+    skill_text: str = "",
 ) -> SessionResult:
     """Wrap a live agent-CLI session: preload project knowledge, harvest on exit."""
     from .agent_context import generate_agent_context
@@ -373,6 +374,10 @@ def wrap_interactive(
     session_dir = scope_dir / "sessions" / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     context_path = None
+    skills_path = None
+    if skill_text:
+        skills_path = session_dir / "SELECTED_SKILLS.md"
+        skills_path.write_text(skill_text.rstrip() + "\n", encoding="utf-8")
     global_db, project_db = _open_scope_dbs(scopes)
     try:
         if project_db is not None:
@@ -394,7 +399,10 @@ def wrap_interactive(
             project_db.close()
 
     started = time.monotonic()
-    exit_code = subprocess.call(command, env=_session_env(session_id, session_dir))
+    env = _session_env(session_id, session_dir)
+    if skills_path:
+        env["ABOVE_ALL_SKILLS"] = str(skills_path)
+    exit_code = subprocess.call(command, env=env)
     duration = time.monotonic() - started
     status = "done" if exit_code == 0 else "failed"
     context_note = f"; context preloaded from {context_path}" if context_path else ""
