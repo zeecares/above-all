@@ -9,11 +9,14 @@ from .agent_context import generate_agent_context
 from .analysis import analyze
 from .async_outcomes import launch_async, reconcile
 from .config import configured_command, load_agent_config
+from .consolidation import apply_changeset, daily_expiry_sweep, pollution_metrics, propose_weekly
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .memory_backend import get_backend
 from .notes import create_note, index_note, list_candidates, search_notes
+from .operations import run_maintenance
 from .paths import resolve_scopes
 from .privacy import ensure_project_privacy, validate_project_privacy
+from .proactivity import create_watch, due_watches, fire_watch, value_gate
 from .routing import load_routing, route
 from .session_wrapper import wrap_interactive
 from .skills import discover, load_selected
@@ -72,6 +75,21 @@ def parser() -> argparse.ArgumentParser:
     w.add_argument("cmd", nargs=argparse.REMAINDER)
     sk = sub.add_parser("skills")
     sk.add_argument("--json", action="store_true")
+    maintenance = sub.add_parser("maintenance")
+    maintenance.add_argument("--weekly", action="store_true")
+    maintenance.add_argument("--max-candidates", type=int, default=100)
+    consolidation = sub.add_parser("consolidate")
+    cs = consolidation.add_subparsers(dest="consolidate_command", required=True)
+    cs.add_parser("sweep")
+    weekly = cs.add_parser("weekly"); weekly.add_argument("--max-candidates", type=int, default=100)
+    apply = cs.add_parser("apply"); apply.add_argument("path"); apply.add_argument("--approve", action="store_true")
+    cs.add_parser("pollution")
+    watches = sub.add_parser("watch")
+    ws = watches.add_subparsers(dest="watch_command", required=True)
+    create = ws.add_parser("create"); create.add_argument("kind"); create.add_argument("spec_json"); create.add_argument("--next-fire"); create.add_argument("--policy", default="value-gated")
+    ws.add_parser("list")
+    fire = ws.add_parser("fire"); fire.add_argument("watch_id"); fire.add_argument("payload_json"); fire.add_argument("--value")
+    ws.add_parser("drain")
     analysis = sub.add_parser("analyze")
     analysis.add_argument("--min-completed", type=int, default=3)
     n = sub.add_parser("note")
@@ -124,6 +142,23 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(analyze(db, scopes.global_root / "analysis", args.min_completed)))
         finally:
             db.close()
+    elif args.command in {"maintenance", "consolidate", "watch"}:
+        init_scopes()
+        scope = scopes.project_root or scopes.global_root
+        db = migrate(scope / "assistant.db", PROJECT_MIGRATIONS if scopes.project_root else GLOBAL_MIGRATIONS)
+        try:
+            if args.command == "maintenance": result = run_maintenance(db, scope, args.weekly, args.max_candidates)
+            elif args.command == "consolidate":
+                if args.consolidate_command == "sweep": result = daily_expiry_sweep(db, scope)
+                elif args.consolidate_command == "weekly": result = {"path": str(propose_weekly(db, scope, scope / "changesets", max_candidates=args.max_candidates))}
+                elif args.consolidate_command == "apply": result = apply_changeset(db, scope, Path(args.path), approve=args.approve)
+                else: result = pollution_metrics(db, scope)
+            elif args.watch_command == "create": result = {"id": create_watch(db, args.kind, json.loads(args.spec_json), args.next_fire, args.policy)}
+            elif args.watch_command == "list": result = {"watches": due_watches(db, "9999-12-31T23:59:59+00:00")}
+            elif args.watch_command == "fire": result = {"event_id": fire_watch(db, args.watch_id, json.loads(args.payload_json), args.value)}
+            else: result = value_gate(db)
+            print(json.dumps(result))
+        finally: db.close()
     elif args.command == "do":
         init_scopes()
         config = load_agent_config(scopes.global_root)
@@ -187,5 +222,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
