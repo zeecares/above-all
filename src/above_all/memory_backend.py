@@ -75,7 +75,9 @@ class SqliteFtsBackend:
         return _notes.active_notes(db, limit)
 
     def approve(self, db, scope_dir, candidate_id, replaces=None):
-        return _notes.approve_candidate(db, scope_dir, candidate_id, replaces=replaces)
+        from .write_gate import promote_candidate
+
+        return promote_candidate(db, scope_dir, candidate_id, replaces=replaces)
 
     def discard(self, scope_dir, candidate_id):
         return _notes.discard_candidate(scope_dir, candidate_id)
