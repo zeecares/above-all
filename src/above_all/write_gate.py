@@ -30,7 +30,7 @@ def _journal_write(path: Path, payload: dict) -> None:
     _atomic_write(path, (json.dumps(payload, sort_keys=True) + "\n").encode())
 
 
-def _restore(db: sqlite3.Connection, payload: dict) -> None:
+def _restore(db: sqlite3.Connection, payload: dict, *, commit: bool = True) -> None:
     for item in payload["files"]:
         path = Path(item["path"])
         before = item.get("before")
@@ -49,7 +49,8 @@ def _restore(db: sqlite3.Connection, payload: dict) -> None:
             with db:
                 db.execute("DELETE FROM notes_fts WHERE note_id=?", (note_id,))
                 db.execute("DELETE FROM notes WHERE id=?", (note_id,))
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def recover_promotions(db: sqlite3.Connection, scope_dir: Path) -> list[str]:
@@ -73,40 +74,52 @@ def promote_candidate(
     fault: Callable[[str], None] | None = None,
 ) -> Path:
     """Revalidate and promote with an on-disk recovery marker around DB/files."""
-    recover_promotions(db, scope_dir)
-    source = scope_dir / "candidates" / f"{candidate_id}.md"
-    if not source.is_file():
-        raise ValueError(f"no candidate named {candidate_id!r}")
-    candidate = parse_note(source.read_text())
-    if candidate.metadata["status"] not in {"candidate", "reviewed"}:
-        raise ValueError(f"note {candidate_id!r} is not promotable")
-
-    active = db.execute("SELECT id,body,path FROM notes WHERE status='active'").fetchall()
-    duplicate = next((row[0] for row in active if _claim(row[1]) == _claim(candidate.body)), None)
-    if duplicate:
-        raise ValueError(f"candidate duplicates active note {duplicate!r}; returned to review")
-    old = None
-    if replaces:
-        old = next((Path(row[2]) for row in active if row[0] == replaces), None)
-        if old is None or not old.is_file():
-            raise ValueError(f"no active note named {replaces!r} to replace")
-
-    metadata = dict(candidate.metadata)
-    metadata["status"] = "active"
-    if replaces:
-        metadata["replaces"] = f"note:{replaces}"
-    target = scope_dir / "notes" / f"{candidate_id}.md"
-    files = [source, target] + ([old] if old else [])
-    journal_payload = {
-        "candidate_id": candidate_id,
-        "files": [
-            {"path": str(path), "before": path.read_bytes().hex() if path.exists() else None}
-            for path in files
-        ],
-    }
-    journal = scope_dir / "transactions" / f"promotion-{uuid4().hex}.json"
-    _journal_write(journal, journal_payload)
+    # Serialize recovery and revalidation with every other promotion using the same memory DB.
+    # Without taking the write lock before reading active memory, two processes can
+    # both validate the same claim and then promote it.
+    db.execute("BEGIN IMMEDIATE")
+    journal: Path | None = None
+    journal_payload: dict | None = None
     try:
+        root = scope_dir / "transactions"
+        for stale_journal in sorted(root.glob("promotion-*.json")):
+            stale_payload = json.loads(stale_journal.read_text())
+            _restore(db, stale_payload, commit=False)
+            stale_journal.unlink()
+        source = scope_dir / "candidates" / f"{candidate_id}.md"
+        if not source.is_file():
+            raise ValueError(f"no candidate named {candidate_id!r}")
+        candidate = parse_note(source.read_text())
+        if candidate.metadata["status"] not in {"candidate", "reviewed"}:
+            raise ValueError(f"note {candidate_id!r} is not promotable")
+
+        active = db.execute("SELECT id,body,path FROM notes WHERE status='active'").fetchall()
+        duplicate = next(
+            (row[0] for row in active if _claim(row[1]) == _claim(candidate.body)), None
+        )
+        if duplicate:
+            raise ValueError(f"candidate duplicates active note {duplicate!r}; returned to review")
+        old = None
+        if replaces:
+            old = next((Path(row[2]) for row in active if row[0] == replaces), None)
+            if old is None or not old.is_file():
+                raise ValueError(f"no active note named {replaces!r} to replace")
+
+        metadata = dict(candidate.metadata)
+        metadata["status"] = "active"
+        if replaces:
+            metadata["replaces"] = f"note:{replaces}"
+        target = scope_dir / "notes" / f"{candidate_id}.md"
+        files = [source, target] + ([old] if old else [])
+        journal_payload = {
+            "candidate_id": candidate_id,
+            "files": [
+                {"path": str(path), "before": path.read_bytes().hex() if path.exists() else None}
+                for path in files
+            ],
+        }
+        journal = scope_dir / "transactions" / f"promotion-{uuid4().hex}.json"
+        _journal_write(journal, journal_payload)
         if fault:
             fault("journal")
         if old:
@@ -119,7 +132,6 @@ def promote_candidate(
         _atomic_write(target, render_note(metadata, candidate.body).encode())
         if fault:
             fault("new_file")
-        db.execute("BEGIN IMMEDIATE")
         if old:
             index_note(db, old)
         index_note(db, target)
@@ -134,6 +146,8 @@ def promote_candidate(
     except BaseException:
         if db.in_transaction:
             db.rollback()
-        _restore(db, journal_payload)
-        journal.unlink(missing_ok=True)
+        if journal_payload is not None:
+            _restore(db, journal_payload)
+        if journal is not None:
+            journal.unlink(missing_ok=True)
         raise
