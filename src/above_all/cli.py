@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from .agent_context import generate_agent_context
+from .analysis import analyze
 from .config import configured_command, load_agent_config
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .memory_backend import get_backend
@@ -13,6 +14,7 @@ from .notes import create_note, index_note, list_candidates, search_notes
 from .paths import resolve_scopes
 from .routing import load_routing, route
 from .session_wrapper import dispatch_headless, wrap_interactive
+from .skills import discover, load_selected
 
 
 def init_scopes(project: bool = True):
@@ -50,9 +52,15 @@ def parser() -> argparse.ArgumentParser:
     d.add_argument("--constraint", action="append", default=[])
     d.add_argument("--source", action="append", default=[])
     d.add_argument("--outcome-id")
+    d.add_argument("--skill", action="append", default=[])
     d.add_argument("cmd", nargs=argparse.REMAINDER)
     w = sub.add_parser("work")
+    w.add_argument("--skill", action="append", default=[])
     w.add_argument("cmd", nargs=argparse.REMAINDER)
+    sk = sub.add_parser("skills")
+    sk.add_argument("--json", action="store_true")
+    analysis = sub.add_parser("analyze")
+    analysis.add_argument("--min-completed", type=int, default=3)
     n = sub.add_parser("note")
     ns = n.add_subparsers(dest="note_command", required=True)
     add = ns.add_parser("add")
@@ -89,6 +97,16 @@ def main(argv: list[str] | None = None) -> int:
         global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
         rows = global_db.execute("SELECT * FROM sessions ORDER BY started_at DESC LIMIT 20")
         print(json.dumps([dict(r) for r in rows], default=str))
+    elif args.command == "skills":
+        items = discover(scopes.global_root, scopes.project_root)
+        print(json.dumps([{"name": x.name, "description": x.description, "path": str(x.path)} for x in items.values()]))
+    elif args.command == "analyze":
+        init_scopes()
+        db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+        try:
+            print(json.dumps(analyze(db, scopes.global_root / "analysis", args.min_completed)))
+        finally:
+            db.close()
     elif args.command == "do":
         init_scopes()
         config = load_agent_config(scopes.global_root)
@@ -96,8 +114,11 @@ def main(argv: list[str] | None = None) -> int:
         cmd = _strip_separator(args.cmd) or configured_command(config, "headless")
         if not cmd:
             raise SystemExit("no headless command: pass `-- <cmd...>` or configure agent.toml")
+        selected = load_selected(scopes.global_root, scopes.project_root, args.skill)
+        skill_text = "\n\n".join(f"# Skill: {x.name}\n\n{x.body}" for x in selected)
+        intent = args.intent + (("\n\n" + skill_text) if skill_text else "")
         result = dispatch_headless(
-            scopes, cmd, args.intent, backend,
+            scopes, cmd, intent, backend,
             constraints=args.constraint, source_anchors=args.source,
             outcome_id=args.outcome_id, provider=config.get("agent_cli", {}).get("provider", "unknown"),
         )
@@ -111,6 +132,10 @@ def main(argv: list[str] | None = None) -> int:
         cmd = _strip_separator(args.cmd) or configured_command(config, "interactive")
         if not cmd:
             raise SystemExit("no interactive command: pass `-- <cmd...>` or configure agent.toml")
+        selected = load_selected(scopes.global_root, scopes.project_root, args.skill)
+        if selected:
+            skill_context = scopes.project_root / "SELECTED_SKILLS.md" if scopes.project_root else scopes.global_root / "SELECTED_SKILLS.md"
+            skill_context.write_text("\n\n".join(f"# {x.name}\n\n{x.body}" for x in selected) + "\n", encoding="utf-8")
         result = wrap_interactive(
             scopes, cmd, backend, provider=config.get("agent_cli", {}).get("provider", "unknown")
         )
@@ -150,3 +175,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
