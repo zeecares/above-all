@@ -11,6 +11,7 @@ from .async_outcomes import launch_async, reconcile
 from .config import configured_command, load_agent_config
 from .consolidation import apply_changeset, daily_expiry_sweep, pollution_metrics, propose_weekly
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
+from .doctor import run_doctor, run_status
 from .memory_backend import get_backend
 from .notes import create_note, index_note, list_candidates, search_notes
 from .operations import run_maintenance
@@ -59,6 +60,10 @@ def parser() -> argparse.ArgumentParser:
     )
     sub.add_parser("scope")
     sub.add_parser("sessions")
+    doc = sub.add_parser("doctor")
+    doc.add_argument("--json", action="store_true")
+    st = sub.add_parser("status")
+    st.add_argument("--json", action="store_true")
     sub.add_parser("reconcile")
     r = sub.add_parser("route")
     r.add_argument("level", choices=("mechanical", "routine", "judgment", "high_stakes"))
@@ -127,6 +132,44 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "route":
         selected = route(load_routing(scopes.global_root / "routing.toml"), args.level, set(args.signal))
         print(json.dumps(selected.__dict__))
+    elif args.command == "doctor":
+        report = run_doctor(scopes)
+        if args.json:
+            print(json.dumps(report))
+        else:
+            for check in report["checks"]:
+                print(f"{check['status'].upper():4}  {check['name']}: {check['detail']}")
+                if check["fix"]:
+                    print(f"      fix: {check['fix']}")
+        if not report["ok"]:
+            raise SystemExit(1)
+    elif args.command == "status":
+        report = run_status(scopes)
+        if args.json:
+            print(json.dumps(report, default=str))
+        elif not report["initialized"]:
+            print(f"above-all not initialized for {report['scope']} - {report['hint']}")
+        else:
+            outcomes = report["outcomes"]
+            print(f"scope: {report['scope']}")
+            print(
+                "outcomes: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(outcomes.items()) if k)
+                if outcomes else "outcomes: none"
+            )
+            print(
+                f"sessions: {report['sessions']} "
+                f"(tokens in {report['tokens_in']}, out {report['tokens_out']})"
+            )
+            print(
+                f"watches: {report['watches']['total']} total, {report['watches']['due']} due, "
+                f"next {report['watches']['next_fire_at'] or 'none scheduled'}"
+            )
+            print(
+                f"reviews: {report['candidates']} candidates, "
+                f"{report['proposed_changesets']} proposed changesets"
+            )
+            print(f"warnings: {report['warnings']}, blocked outcomes: {report['blocked_outcomes']}")
     elif args.command == "sessions":
         init_scopes()
         global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
