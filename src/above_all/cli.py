@@ -12,12 +12,13 @@ from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .memory_backend import get_backend
 from .notes import create_note, index_note, list_candidates, search_notes
 from .paths import resolve_scopes
+from .privacy import ensure_project_privacy, validate_project_privacy
 from .routing import load_routing, route
 from .session_wrapper import dispatch_headless, wrap_interactive
 from .skills import discover, load_selected
 
 
-def init_scopes(project: bool = True):
+def init_scopes(project: bool = True, share_approved: bool = False):
     scopes = resolve_scopes()
     migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS).close()
     scopes.global_root.mkdir(parents=True, exist_ok=True)
@@ -28,6 +29,7 @@ def init_scopes(project: bool = True):
         if not target.exists() and example.exists():
             shutil.copy(example, target)
     if project and scopes.project_root:
+        ensure_project_privacy(scopes.project_root.parent, share_approved)
         migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS).close()
         (scopes.project_root / "notes").mkdir(parents=True, exist_ok=True)
         (scopes.project_root / "candidates").mkdir(parents=True, exist_ok=True)
@@ -41,7 +43,16 @@ def _strip_separator(cmd: list[str]) -> list[str]:
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="above-all")
     sub = p.add_subparsers(dest="command", required=True)
-    sub.add_parser("init")
+    init = sub.add_parser("init")
+    init.add_argument(
+        "--share-approved", action="store_true",
+        help="allow approved project notes and generated context to be committed",
+    )
+    privacy = sub.add_parser("privacy-check")
+    privacy.add_argument(
+        "--share-approved", action="store_true",
+        help="validate the exact approved-note sharing surface",
+    )
     sub.add_parser("scope")
     sub.add_parser("sessions")
     r = sub.add_parser("route")
@@ -85,8 +96,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     scopes = resolve_scopes()
     if args.command == "init":
-        scopes = init_scopes()
+        scopes = init_scopes(share_approved=args.share_approved)
         print(json.dumps({"global": str(scopes.global_root), "project": str(scopes.project_root) if scopes.project_root else None}))
+    elif args.command == "privacy-check":
+        if not scopes.project_root:
+            raise SystemExit("privacy-check requires a Git project")
+        print(json.dumps(validate_project_privacy(scopes.project_root.parent, args.share_approved)))
     elif args.command == "scope":
         print(json.dumps({"global": str(scopes.global_root), "project": str(scopes.project_root) if scopes.project_root else None}))
     elif args.command == "route":
@@ -177,4 +192,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
