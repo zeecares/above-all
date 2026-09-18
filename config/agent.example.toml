@@ -1,0 +1,13 @@
+# Placeholder agent-CLI invocations. Copy to ~/.above-all/agent.toml and map to
+# your environment's real CLI builds. No real endpoints or paths are committed.
+
+[agent_cli]
+provider = "your-agent-cli"
+# Tokens may reference {prompt_file}, {session_dir}, and {session_id}.
+headless_command = ["your-agent-cli", "-p", "{prompt_file}", "--output-format", "json"]
+interactive_command = ["your-agent-cli"]
+
+[memory]
+# Reference backend. mem0_oss is a later pluggable candidate pending trace
+# evals; see spec/memory.md in the pa-spec repo.
+backend = "sqlite_fts"

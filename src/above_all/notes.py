@@ -107,3 +107,111 @@ def search_notes(db, query: str) -> list[dict]:
         (query, today),
     )
     return [dict(row) for row in rows]
+
+
+
+def _write_note(path: Path, metadata: dict, body: str) -> Path:
+    front = yaml.safe_dump(metadata, sort_keys=False).strip()
+    path.write_text(f"---\n{front}\n---\n{body.strip()}\n", encoding="utf-8")
+    return path
+
+
+def set_note_status(path: Path, status: str, extra: dict | None = None) -> Path:
+    note = parse_note(path.read_text(encoding="utf-8"))
+    metadata = dict(note.metadata)
+    metadata["status"] = status
+    if extra:
+        metadata.update(extra)
+    return _write_note(path, metadata, note.body)
+
+
+def create_candidate(
+    candidates_dir: Path,
+    title: str,
+    body: str,
+    note_type: str,
+    sources: list[str],
+    stale_after: str | None = None,
+    extra: dict | None = None,
+) -> Path:
+    """Create a candidate note. Candidates are drafts awaiting review, never active memory."""
+    candidates_dir.mkdir(parents=True, exist_ok=True)
+    note_id = uuid4().hex
+    metadata = {
+        "type": note_type,
+        "sources": sources,
+        "generated": datetime.now(timezone.utc).isoformat(),
+        "verified": "none",
+        "status": "candidate",
+        "stale_after": stale_after,
+    }
+    if extra:
+        metadata.update(extra)
+    return _write_note(candidates_dir / f"{note_id}.md", metadata, f"# {title}\n\n{body}")
+
+
+def list_candidates(candidates_dir: Path) -> list[dict]:
+    if not candidates_dir.is_dir():
+        return []
+    found = []
+    for path in sorted(candidates_dir.glob("*.md")):
+        try:
+            note = parse_note(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if note.metadata["status"] != "candidate":
+            continue
+        title = next(
+            (line[2:].strip() for line in note.body.splitlines() if line.startswith("# ")),
+            path.stem,
+        )
+        found.append(
+            {"id": path.stem, "title": title, "generated": str(note.metadata["generated"])}
+        )
+    return found
+
+
+def active_notes(db, limit: int = 20) -> list[dict]:
+    today = datetime.now(timezone.utc).date().isoformat()
+    rows = db.execute(
+        "SELECT id,title,body,path FROM notes WHERE status='active' "
+        "AND (stale_after IS NULL OR stale_after >= ?) ORDER BY indexed_at DESC LIMIT ?",
+        (today, limit),
+    )
+    return [dict(row) for row in rows]
+
+
+def approve_candidate(db, scope_dir: Path, candidate_id: str, replaces: str | None = None) -> Path:
+    """Promote a candidate to active memory; optionally supersede the note it replaces.
+
+    Replacement keeps the prior note on disk with its source chain as superseded -
+    replace, never silent append-and-contradict.
+    """
+    source = scope_dir / "candidates" / f"{candidate_id}.md"
+    if not source.is_file():
+        raise ValueError(f"no candidate named {candidate_id!r}")
+    note = parse_note(source.read_text(encoding="utf-8"))
+    if note.metadata["status"] != "candidate":
+        raise ValueError(f"note {candidate_id!r} is {note.metadata['status']}, not a candidate")
+    if replaces:
+        old = scope_dir / "notes" / f"{replaces}.md"
+        if not old.is_file():
+            raise ValueError(f"no note named {replaces!r} to replace")
+        set_note_status(old, "superseded")
+        index_note(db, old)
+    target = scope_dir / "notes" / f"{candidate_id}.md"
+    metadata = dict(note.metadata)
+    metadata["status"] = "active"
+    if replaces:
+        metadata["replaces"] = f"note:{replaces}"
+    _write_note(target, metadata, note.body)
+    source.unlink()
+    index_note(db, target)
+    return target
+
+
+def discard_candidate(scope_dir: Path, candidate_id: str) -> Path:
+    source = scope_dir / "candidates" / f"{candidate_id}.md"
+    if not source.is_file():
+        raise ValueError(f"no candidate named {candidate_id!r}")
+    return set_note_status(source, "rejected")

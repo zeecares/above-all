@@ -5,25 +5,35 @@ import json
 import shutil
 from pathlib import Path
 
+from .agent_context import generate_agent_context
+from .config import configured_command, load_agent_config
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
-from .notes import create_note, index_note, search_notes
+from .memory_backend import get_backend
+from .notes import create_note, index_note, list_candidates, search_notes
 from .paths import resolve_scopes
 from .routing import load_routing, route
+from .session_wrapper import dispatch_headless, wrap_interactive
 
 
 def init_scopes(project: bool = True):
     scopes = resolve_scopes()
     migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS).close()
     scopes.global_root.mkdir(parents=True, exist_ok=True)
-    routing = scopes.global_root / "routing.toml"
-    if not routing.exists():
-        example = Path(__file__).parents[2] / "config" / "routing.example.toml"
-        if example.exists():
-            shutil.copy(example, routing)
+    examples = Path(__file__).parents[2] / "config"
+    for name in ("routing", "agent"):
+        target = scopes.global_root / f"{name}.toml"
+        example = examples / f"{name}.example.toml"
+        if not target.exists() and example.exists():
+            shutil.copy(example, target)
     if project and scopes.project_root:
         migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS).close()
         (scopes.project_root / "notes").mkdir(parents=True, exist_ok=True)
+        (scopes.project_root / "candidates").mkdir(parents=True, exist_ok=True)
     return scopes
+
+
+def _strip_separator(cmd: list[str]) -> list[str]:
+    return cmd[1:] if cmd[:1] == ["--"] else cmd
 
 
 def parser() -> argparse.ArgumentParser:
@@ -31,9 +41,18 @@ def parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("scope")
+    sub.add_parser("sessions")
     r = sub.add_parser("route")
     r.add_argument("level", choices=("mechanical", "routine", "judgment", "high_stakes"))
     r.add_argument("--signal", action="append", default=[])
+    d = sub.add_parser("do")
+    d.add_argument("intent")
+    d.add_argument("--constraint", action="append", default=[])
+    d.add_argument("--source", action="append", default=[])
+    d.add_argument("--outcome-id")
+    d.add_argument("cmd", nargs=argparse.REMAINDER)
+    w = sub.add_parser("work")
+    w.add_argument("cmd", nargs=argparse.REMAINDER)
     n = sub.add_parser("note")
     ns = n.add_subparsers(dest="note_command", required=True)
     add = ns.add_parser("add")
@@ -44,6 +63,13 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("--stale-after")
     search = ns.add_parser("search")
     search.add_argument("query")
+    ns.add_parser("candidates")
+    approve = ns.add_parser("approve")
+    approve.add_argument("candidate_id")
+    approve.add_argument("--replace")
+    discard = ns.add_parser("discard")
+    discard.add_argument("candidate_id")
+    ns.add_parser("context")
     return p
 
 
@@ -58,6 +84,39 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "route":
         selected = route(load_routing(scopes.global_root / "routing.toml"), args.level, set(args.signal))
         print(json.dumps(selected.__dict__))
+    elif args.command == "sessions":
+        init_scopes()
+        global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+        rows = global_db.execute("SELECT * FROM sessions ORDER BY started_at DESC LIMIT 20")
+        print(json.dumps([dict(r) for r in rows], default=str))
+    elif args.command == "do":
+        init_scopes()
+        config = load_agent_config(scopes.global_root)
+        backend = get_backend(config.get("memory", {}).get("backend"))
+        cmd = _strip_separator(args.cmd) or configured_command(config, "headless")
+        if not cmd:
+            raise SystemExit("no headless command: pass `-- <cmd...>` or configure agent.toml")
+        result = dispatch_headless(
+            scopes, cmd, args.intent, backend,
+            constraints=args.constraint, source_anchors=args.source,
+            outcome_id=args.outcome_id, provider=config.get("agent_cli", {}).get("provider", "unknown"),
+        )
+        print(json.dumps({"session_id": result.session_id, "status": result.status,
+                          "exit_code": result.exit_code, "summary": result.summary,
+                          "warnings": result.warnings, "session_dir": str(result.session_dir)}))
+    elif args.command == "work":
+        init_scopes()
+        config = load_agent_config(scopes.global_root)
+        backend = get_backend(config.get("memory", {}).get("backend"))
+        cmd = _strip_separator(args.cmd) or configured_command(config, "interactive")
+        if not cmd:
+            raise SystemExit("no interactive command: pass `-- <cmd...>` or configure agent.toml")
+        result = wrap_interactive(
+            scopes, cmd, backend, provider=config.get("agent_cli", {}).get("provider", "unknown")
+        )
+        print(json.dumps({"session_id": result.session_id, "status": result.status,
+                          "exit_code": result.exit_code, "summary": result.summary,
+                          "warnings": result.warnings, "session_dir": str(result.session_dir)}))
     elif args.note_command == "add":
         if not scopes.project_root:
             raise SystemExit("note commands require a Git project")
@@ -71,6 +130,21 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("note commands require a Git project")
         db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
         print(json.dumps(search_notes(db, args.query)))
+    elif args.note_command in {"candidates", "approve", "discard", "context"}:
+        if not scopes.project_root:
+            raise SystemExit("note commands require a Git project")
+        init_scopes()
+        backend = get_backend(load_agent_config(scopes.global_root).get("memory", {}).get("backend"))
+        if args.note_command == "candidates":
+            print(json.dumps(list_candidates(scopes.project_root / "candidates")))
+        elif args.note_command == "approve":
+            db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+            print(backend.approve(db, scopes.project_root, args.candidate_id, replaces=args.replace))
+        elif args.note_command == "discard":
+            print(backend.discard(scopes.project_root, args.candidate_id))
+        else:
+            db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+            print(generate_agent_context(scopes.project_root, db, backend))
     return 0
 
 
