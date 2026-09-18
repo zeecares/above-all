@@ -35,8 +35,12 @@ def test_candidate_is_not_active_memory(tmp_path):
     scope, db = make_scope(tmp_path)
     backend = get_backend()
     path = backend.create_candidate(
-        scope, title="Session finding", body="alpha beta", note_type="summary",
-        sources=["session:s1"], extra={"observer": "above-all"},
+        scope,
+        title="Session finding",
+        body="alpha beta",
+        note_type="summary",
+        sources=["session:s1"],
+        extra={"observer": "above-all"},
     )
     note = parse_note(path.read_text())
     assert note.metadata["status"] == "candidate"
@@ -91,3 +95,130 @@ def test_approve_requires_a_candidate(tmp_path):
     scope, db = make_scope(tmp_path)
     with pytest.raises(ValueError, match="no candidate"):
         get_backend().approve(db, scope, "missing")
+
+
+def test_direct_approve_revalidates_against_current_active_memory(tmp_path):
+    scope, db = make_scope(tmp_path)
+    backend = get_backend()
+    candidate = backend.create_candidate(
+        scope, title="Candidate", body="same claim", note_type="fact", sources=["session:s1"]
+    )
+    add_active_note(db, scope, body="same claim")
+
+    with pytest.raises(ValueError, match="duplicates active"):
+        backend.approve(db, scope, candidate.stem)
+
+    assert candidate.exists()
+    assert db.execute("SELECT COUNT(*) FROM notes WHERE status='active'").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("boundary", ["journal", "old_file", "new_file", "db", "commit"])
+def test_direct_approve_rolls_back_every_file_and_db_boundary(tmp_path, boundary):
+    from above_all.write_gate import promote_candidate
+
+    scope, db = make_scope(tmp_path)
+    old_id = add_active_note(db, scope, body="old claim")
+    candidate = get_backend().create_candidate(
+        scope, title="New", body="new claim", note_type="fact", sources=["session:s2"]
+    )
+    before_candidate = candidate.read_bytes()
+    before_old = (scope / "notes" / f"{old_id}.md").read_bytes()
+
+    def fail(at):
+        if at == boundary:
+            raise RuntimeError(f"fault at {at}")
+
+    with pytest.raises(RuntimeError, match="fault"):
+        promote_candidate(db, scope, candidate.stem, replaces=old_id, fault=fail)
+
+    assert candidate.read_bytes() == before_candidate
+    assert (scope / "notes" / f"{old_id}.md").read_bytes() == before_old
+    assert not (scope / "notes" / f"{candidate.stem}.md").exists()
+    assert not list((scope / "transactions").glob("*.json"))
+    assert [row["title"] for row in get_backend().search(db, "old")] == ["Old fact"]
+
+
+def test_recovery_rolls_back_leftover_promotion_journal(tmp_path):
+    import json
+
+    from above_all.write_gate import recover_promotions
+
+    scope, db = make_scope(tmp_path)
+    candidate = get_backend().create_candidate(
+        scope, title="Candidate", body="recover me", note_type="fact", sources=["session:s1"]
+    )
+    target = scope / "notes" / f"{candidate.stem}.md"
+    target.write_text(candidate.read_text().replace("status: candidate", "status: active"))
+    index_note(db, target)
+    journal = scope / "transactions" / "promotion-interrupted.json"
+    journal.parent.mkdir()
+    journal.write_text(
+        json.dumps(
+            {
+                "candidate_id": candidate.stem,
+                "files": [
+                    {"path": str(candidate), "before": candidate.read_bytes().hex()},
+                    {"path": str(target), "before": None},
+                ],
+            }
+        )
+    )
+
+    assert recover_promotions(db, scope) == [candidate.stem]
+    assert candidate.exists() and not target.exists() and not journal.exists()
+    assert get_backend().search(db, "recover") == []
+
+
+def test_concurrent_direct_approvals_serialize_revalidation(tmp_path):
+    import sqlite3
+    import threading
+    import time
+
+    from above_all.write_gate import promote_candidate
+
+    scope, first_db = make_scope(tmp_path)
+    first = get_backend().create_candidate(
+        scope, title="First", body="one live claim", note_type="fact", sources=["session:s1"]
+    )
+    second = get_backend().create_candidate(
+        scope, title="Second", body="one live claim", note_type="fact", sources=["session:s2"]
+    )
+    second_db = sqlite3.connect(scope / "assistant.db", timeout=2, check_same_thread=False)
+    second_db.row_factory = sqlite3.Row
+    locked = threading.Event()
+    release = threading.Event()
+    results = []
+
+    def pause(at):
+        if at == "journal":
+            locked.set()
+            assert release.wait(2)
+
+    def promote_first():
+        promote_candidate(first_db, scope, first.stem, fault=pause)
+        results.append("first")
+
+    def promote_second():
+        try:
+            promote_candidate(second_db, scope, second.stem)
+        except ValueError as exc:
+            results.append(str(exc))
+
+    first_db.close()
+    first_db = sqlite3.connect(scope / "assistant.db", timeout=2, check_same_thread=False)
+    first_db.row_factory = sqlite3.Row
+    t1 = threading.Thread(target=promote_first)
+    t2 = threading.Thread(target=promote_second)
+    t1.start()
+    assert locked.wait(2)
+    t2.start()
+    time.sleep(0.1)
+    assert t2.is_alive(), "second promotion should wait for the revalidation lock"
+    release.set()
+    t1.join(2)
+    t2.join(2)
+
+    assert results[0] == "first"
+    assert "duplicates active" in results[1]
+    assert second.exists()
+    assert second_db.execute("SELECT COUNT(*) FROM notes WHERE status='active'").fetchone()[0] == 1

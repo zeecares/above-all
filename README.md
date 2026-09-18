@@ -31,12 +31,17 @@ python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 above-all init
+# Or explicitly share reviewed notes/context while private state stays ignored:
+above-all init --share-approved
+above-all privacy-check --share-approved
 above-all scope
 above-all skills
 above-all analyze
 pytest
 ruff check .
 ```
+
+Project init writes a tracked `.above-all/.gitignore`. The default keeps the whole project scope local. `--share-approved` generates exact exceptions only for active, valid 32-hex-ID notes and generated context; rerun init after approving a new note to refresh that list. Databases, candidates, sessions, traces, logs, selected-skill files, unknown future paths, and malformed or inactive notes stay ignored. Init refuses tracked state outside the selected public surface. `above-all privacy-check [--share-approved]` validates both tracked files and the installed policy before a commit.
 
 No credentials or provider-specific endpoints are committed. The supported adapter targets the stock public Claude Code format only; confirm internal-build transcript shape before enabling it.
 
@@ -47,6 +52,7 @@ Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLi
 ## Next
 
 Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
+
 
 
 

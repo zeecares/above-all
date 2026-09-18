@@ -110,9 +110,13 @@ def search_notes(db, query: str) -> list[dict]:
 
 
 
-def _write_note(path: Path, metadata: dict, body: str) -> Path:
+def render_note(metadata: dict, body: str) -> str:
     front = yaml.safe_dump(metadata, sort_keys=False).strip()
-    path.write_text(f"---\n{front}\n---\n{body.strip()}\n", encoding="utf-8")
+    return f"---\n{front}\n---\n{body.strip()}\n"
+
+
+def _write_note(path: Path, metadata: dict, body: str) -> Path:
+    path.write_text(render_note(metadata, body), encoding="utf-8")
     return path
 
 
