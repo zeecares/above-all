@@ -214,8 +214,8 @@ def test_doctor_rejects_missing_endpoint_or_model(world: World):
 def test_status_handles_empty_legacy_store_without_crashing(world: World):
     import sqlite3
 
-    world.home.mkdir(parents=True)
-    sqlite3.connect(world.home / "assistant.db").close()
+    world.scope.mkdir(parents=True)
+    sqlite3.connect(world.scope / "assistant.db").close()
     result = world.cli("status", "--json", check=False)
     assert result.returncode == 0
     assert "Traceback" not in result.stderr
