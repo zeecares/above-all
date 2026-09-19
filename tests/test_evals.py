@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from above_all.evals import check_thresholds, evaluate_fixture, load_fixture
