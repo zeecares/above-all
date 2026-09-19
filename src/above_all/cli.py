@@ -17,7 +17,7 @@ from .consolidation import (
 )
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .doctor import run_doctor, run_status
-from .evals import check_thresholds, evaluate_fixture, load_fixture
+from .evals import check_thresholds, compare_retrievers, evaluate_fixture, load_fixture
 from .memory_backend import get_backend
 from .notes import create_note, index_note, list_candidates, search_notes
 from .operations import run_maintenance
@@ -107,6 +107,7 @@ def parser() -> argparse.ArgumentParser:
     evaluation.add_argument("--thresholds", type=Path)
     evaluation.add_argument("--output", type=Path)
     evaluation.add_argument("--json", action="store_true")
+    evaluation.add_argument("--compare-backends", action="store_true")
     analysis = sub.add_parser("analyze")
     analysis.add_argument("--min-completed", type=int, default=3)
     n = sub.add_parser("note")
@@ -188,14 +189,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"warnings: {report['warnings']}, blocked outcomes: {report['blocked_outcomes']}")
     elif args.command == "eval":
-        report = evaluate_fixture(load_fixture(args.fixture), k=args.k)
+        fixture = load_fixture(args.fixture)
+        report = compare_retrievers(fixture, k=args.k) if args.compare_backends else evaluate_fixture(fixture, k=args.k)
         failures = []
         if args.thresholds:
             failures = check_thresholds(report, load_fixture(args.thresholds))
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        if args.json:
+        if args.compare_backends:
+            print(json.dumps(report, indent=None if args.json else 2, sort_keys=True))
+        elif args.json:
             print(json.dumps(report, sort_keys=True))
         else:
             retrieval = report["retrieval"]
@@ -337,3 +341,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
