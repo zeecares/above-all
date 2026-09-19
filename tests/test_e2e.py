@@ -412,3 +412,53 @@ def test_headless_worker_harvests_candidate_trace_and_usage(world: World):
     status = json.loads(world.cli("status", "--json").stdout)
     assert status["tokens_in"] == 10
     assert status["tokens_out"] == 5
+
+
+
+def test_headless_harvest_retry_is_idempotent_and_repairs_both_stores(world: World):
+    world.init()
+    world.configure_fake_agent()
+    out = json.loads(world.cli("do", "retry harvest proof").stdout)
+    session_dir = Path(out["session_dir"])
+    assert _wait_for((session_dir / "harvest.json").is_file)
+    candidate = world.scope / "candidates" / f"session-{out['session_id']}.md"
+    assert candidate.is_file()
+
+    # Mutation pin: replaying a completed harvest does not add a candidate,
+    # trace import, usage row, or token total.
+    (session_dir / "harvest.json").unlink()
+    assert json.loads(world.cli("reconcile").stdout) == []
+    assert candidate.is_file()
+    assert len(list((world.scope / "candidates").glob("*.md"))) == 1
+    assert (session_dir / "harvest.json").is_file()
+    global_db = world.global_db()
+    project_db = world.project_db()
+    try:
+        assert global_db.execute(
+            "SELECT COUNT(*) c FROM trace_usage WHERE session_id=?", (out["session_id"],)
+        ).fetchone()["c"] == 1
+        assert global_db.execute(
+            "SELECT tokens_in,tokens_out FROM sessions WHERE id=?", (out["session_id"],)
+        ).fetchone() == (10, 5)
+        assert project_db.execute(
+            "SELECT tokens_in,tokens_out FROM sessions WHERE id=?", (out["session_id"],)
+        ).fetchone() == (10, 5)
+    finally:
+        global_db.close()
+        project_db.close()
+    status = json.loads(world.cli("status", "--json").stdout)
+    assert (status["tokens_in"], status["tokens_out"]) == (10, 5)
+
+
+def test_reconcile_completed_outcome_with_missing_harvest(world: World):
+    world.init()
+    world.configure_fake_agent()
+    out = json.loads(world.cli("do", "recover missing harvest").stdout)
+    session_dir = Path(out["session_dir"])
+    assert _wait_for((session_dir / "harvest.json").is_file)
+    (session_dir / "harvest.json").unlink()
+    candidate = world.scope / "candidates" / f"session-{out['session_id']}.md"
+    candidate.unlink()
+    assert json.loads(world.cli("reconcile").stdout) == []
+    assert candidate.is_file()
+    assert (session_dir / "harvest.json").is_file()
