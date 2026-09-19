@@ -98,3 +98,48 @@ def test_contradiction_edge_requires_an_active_target(tmp_path):
         backend.approve(db, scope, path.stem, contradicts=["missing"] )
     assert path.exists()
     assert db.execute("SELECT count(*) FROM knowledge_claims").fetchone()[0] == 0
+
+
+
+def test_entity_definitions_are_append_only(tmp_path):
+    import pytest
+
+    scope, db = make_scope(tmp_path)
+    backend = get_backend()
+    first = candidate(backend, scope, "First", "Alice owns one",
+                      entities=[{"id": "alice", "name": "Alice", "type": "person"}])
+    backend.approve(db, scope, first.stem)
+    conflicting = candidate(backend, scope, "Second", "Alice owns two",
+                            entities=[{"id": "alice", "name": "Alice Ltd", "type": "org"}])
+    with pytest.raises(ValueError, match="append-only definition"):
+        backend.approve(db, scope, conflicting.stem)
+    assert conflicting.exists()
+    row = db.execute(
+        "SELECT name,entity_type,note_id FROM knowledge_entities WHERE id='alice'"
+    ).fetchone()
+    assert tuple(row) == ("Alice", "person", first.stem)
+
+
+def test_post_commit_recovery_removes_derived_map_rows(tmp_path):
+    import pytest
+
+    from above_all.write_gate import promote_candidate
+
+    scope, db = make_scope(tmp_path)
+    path = candidate(get_backend(), scope, "Crash", "crash claim")
+
+    def fail(stage):
+        if stage == "commit":
+            raise RuntimeError("crash")
+
+    with pytest.raises(RuntimeError, match="crash"):
+        promote_candidate(db, scope, path.stem, fault=fail)
+    assert path.exists()
+    assert not (scope / "notes" / f"{path.stem}.md").exists()
+    assert db.execute("SELECT count(*) FROM notes WHERE id=?", (path.stem,)).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM knowledge_claims WHERE note_id=?", (path.stem,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM knowledge_claims_fts WHERE claim_id=?", (f"note:{path.stem}",)
+    ).fetchone()[0] == 0
