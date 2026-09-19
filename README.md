@@ -55,6 +55,12 @@ Project init writes a tracked `.above-all/.gitignore`. The default keeps the who
 
 No credentials or provider-specific endpoints are committed. The supported adapter targets the stock public Claude Code format only; confirm internal-build transcript shape before enabling it.
 
+## Safe trace export
+
+`above-all trace export --session-id <completed-id> --output ./trace-export` exports only explicitly scoped, completed sessions. Repeat `--session-id`, or scope by `--outcome-id`, `--project`, `--since`, and `--until`; at least one filter is required, and filters combine - a session must match every given filter. On session-ID collisions the project scope overlays the global scope, matching the storage model. Each selected transcript remains stock Claude Code JSONL so the existing adapter can parse it. `manifest.json` records schema version, exact selection, included sessions, original and exported SHA-256 fingerprints, and redaction counts. Existing output paths are never overwritten.
+
+Redaction is deterministic and best-effort. It blanks string leaves at any depth under secret-looking keys (`token`, `secret`, `password`, `api-key`, `credential`, `auth`/`authorization`, and their plural forms, without matching `author`), rewrites common bearer/provider token shapes and `token=`, `password=`, `secret=`, `api_key=`-style strings (including inside JSON serialized into string values), replaces values of current environment variables whose names look secret-bearing, and rewrites the current absolute home path as `~`. It does not understand other encodings, split/obfuscated secrets, application-specific credentials, secrets in JSON keys or outside string values, or sensitive content that does not look like a secret. **The redactor is not a security boundary.** Review the exported files before sharing them, and use a separate account/host boundary for hostile corpora.
+
 ## Storage model
 
 Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLite for search. The global scope owns cross-project outcomes, sessions, decisions, and events; the project scope owns project outcomes, decisions, sessions, events, and notes. When IDs collide, the project row overlays the global row.
@@ -105,5 +111,6 @@ above-all eval tests/fixtures/eval-golden.json --compare-backends --json
 ```
 
 The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
+
 
 
