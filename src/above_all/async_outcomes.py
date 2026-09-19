@@ -234,6 +234,37 @@ def run_worker(manifest_path: Path) -> int:
     except OSError as exc:
         status, summary, code = "blocked", f"command launch failed: {exc}", 127
     _finish(manifest, status, summary)
+
+    # Headless sessions use the same exit harvest as interactive sessions. The
+    # detached worker owns this step because the launching CLI has already
+    # returned. This creates a review-only memory candidate and imports an
+    # explicit wrapper-owned Claude Code transcript when one exists.
+    from .config import load_agent_config
+    from .memory_backend import get_backend
+    from .session_wrapper import _exit_harvest
+
+    project_root = None
+    if len(manifest["scopes"]) > 1:
+        project_root = Path(manifest["scopes"][1][0]).parent
+    scopes = Scopes(Path(manifest["scopes"][0][0]).parent, project_root)
+    backend = get_backend(load_agent_config(scopes.global_root).get("memory", {}).get("backend"))
+    _exit_harvest(
+        scopes,
+        {
+            "id": manifest["session_id"],
+            "provider": manifest["provider"],
+            "mode": "headless",
+            "outcome_id": manifest["outcome_id"],
+            "started_at": manifest["started_at"],
+            "source_path": manifest["session_dir"],
+        },
+        summary,
+        backend,
+        note_extra={
+            "observer": "above-all",
+            "subject": project_root.parent.name if project_root else "global",
+        },
+    )
     return code
 
 
