@@ -49,6 +49,8 @@ No credentials or provider-specific endpoints are committed. The supported adapt
 
 Work state stays in SQLite. Knowledge stays in Markdown and is indexed into SQLite for search. The global scope owns cross-project outcomes, sessions, decisions, and events; the project scope owns project outcomes, decisions, sessions, events, and notes. When IDs collide, the project row overlays the global row.
 
+Reviewed notes also mirror into a small SQLite knowledge map: claims distinguish premises from inferences and carry confidence, scope, freshness, exact source anchors, optional entities/relations, and supersession/contradiction edges. The map is updated only by the existing note index inside the candidate review gate. It is not a second write path and does not infer facts. `above-all memory why <query>` (or `memory explain`) returns the active, fresh claim plus its evidence path. Map-assisted retrieval is not enabled by default; it must beat the held-out eval baseline before serving ordinary search.
+
 ## Next
 
 Agent CLI commands default to placeholders in `config/agent.example.toml`; copy it to `~/.above-all/agent.toml` and map it to your environment, or pass commands explicitly after `--`.
