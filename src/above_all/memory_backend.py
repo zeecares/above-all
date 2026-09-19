@@ -83,7 +83,18 @@ class SqliteFtsBackend:
         return _notes.discard_candidate(scope_dir, candidate_id)
 
 
-_BACKENDS = {"sqlite_fts": SqliteFtsBackend}
+class SqliteHybridBackend(SqliteFtsBackend):
+    """Opt-in BM25 plus local hashed n-gram embeddings, merged by RRF."""
+
+    name = "sqlite_hybrid"
+
+    def search(self, db, query):
+        from .hybrid import reciprocal_rank_fusion, semantic_rows
+
+        return reciprocal_rank_fusion(_notes.search_notes(db, query), semantic_rows(db, query))
+
+
+_BACKENDS = {"sqlite_fts": SqliteFtsBackend, "sqlite_hybrid": SqliteHybridBackend}
 
 
 def get_backend(name: str | None = None) -> MemoryBackend:
@@ -95,3 +106,4 @@ def get_backend(name: str | None = None) -> MemoryBackend:
             "mem0_oss is a later pluggable candidate pending trace evals - see spec/memory.md)"
         )
     return _BACKENDS[selected]()
+

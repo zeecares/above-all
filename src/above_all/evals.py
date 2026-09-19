@@ -191,3 +191,61 @@ def check_thresholds(report: dict[str, Any], thresholds: dict[str, Any]) -> list
             if "max" in bounds and actual > float(bounds["max"]):
                 failures.append(f"{section}.{metric}={actual:.6f} above {float(bounds['max']):.6f}")
     return failures
+
+
+
+def _retrieve_hybrid(db: sqlite3.Connection, query: str, k: int) -> list[dict[str, Any]]:
+    from .hybrid import embed, reciprocal_rank_fusion
+    started = time.perf_counter()
+    lexical = _retrieve(db, query, max(k, 20))
+    q = embed(query)
+    semantic = []
+    for row in db.execute("SELECT id,scope,title,body FROM notes"):
+        score = sum(a * b for a, b in zip(q, embed(f"{row['title']}\n{row['body']}")))
+        if score > 0:
+            semantic.append((score, dict(row)))
+    semantic.sort(key=lambda item: (-item[0], item[1]["id"]))
+    fused = reciprocal_rank_fusion(lexical, [row for _, row in semantic], limit=k)
+    elapsed = (time.perf_counter() - started) * 1000
+    return [{**row, "latency_ms": elapsed} for row in fused]
+
+
+def _evaluate_retriever(fixture: dict[str, Any], retriever, k: int) -> dict[str, float]:
+    notes = [EvalNote(**item) for item in fixture.get("notes", [])]
+    precision = []; recall = []; mrr = []; latencies = []
+    for case in fixture["cases"]:
+        db = _make_index(notes, str(case.get("scope", "global")))
+        try:
+            found = retriever(db, str(case["query"]), k)
+        finally:
+            db.close()
+        ids = [row["id"] for row in found]
+        relevant = set(map(str, case.get("relevant_note_ids", [])))
+        hits = relevant.intersection(ids)
+        precision.append(len(hits) / k if ids else (1.0 if not relevant else 0.0))
+        recall.append(len(hits) / len(relevant) if relevant else 1.0)
+        rank = next((i for i, item in enumerate(ids, 1) if item in relevant), None)
+        mrr.append(1.0 / rank if rank else (1.0 if not relevant else 0.0))
+        if found: latencies.append(found[0]["latency_ms"])
+    return {"precision_at_k": _mean(precision), "recall_at_k": _mean(recall), "mrr": _mean(mrr), "mean_latency_ms": _mean(latencies)}
+
+
+def compare_retrievers(fixture: dict[str, Any], *, k: int | None = None) -> dict[str, Any]:
+    """Measure opt-in hybrid against the FTS baseline on the same held-out cases."""
+    top_k = int(k or fixture.get("k", 5))
+    baseline = _evaluate_retriever(fixture, _retrieve, top_k)
+    candidate = _evaluate_retriever(fixture, _retrieve_hybrid, top_k)
+    delta = {key: candidate[key] - baseline[key] for key in baseline}
+    # The synthetic golden fixture is a safety gate, not evidence for a default flip.
+    return {
+        "baseline_backend": "sqlite_fts", "candidate_backend": "sqlite_hybrid", "k": top_k,
+        "baseline": baseline, "candidate": candidate, "delta": delta,
+        "recommendation": {
+            "enable_by_default": False,
+            "reason": "FTS remains default until a material gain is reproduced on a larger real held-out query set.",
+        },
+        "limitations": [
+            "The checked-in golden set is tiny and mostly lexical; this comparison is directional, not production evidence.",
+            "The local feature hash has no model download but is not a general semantic sentence embedding.",
+        ],
+    }

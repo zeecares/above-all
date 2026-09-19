@@ -61,3 +61,24 @@ def test_thresholds_gate_minimums_and_maximums():
 def test_rejects_unversioned_fixture():
     with pytest.raises(ValueError, match="version"):
         evaluate_fixture({"cases": [{"id": "x", "query": "x"}]})
+
+
+
+def test_backend_comparison_reports_measured_delta():
+    fixture = load_fixture(FIXTURE)
+    fixture["notes"].append({
+        "id": "spelling", "scope": "project-a", "title": "Favourite colour",
+        "body": "The favourite colour is teal.", "status": "active",
+    })
+    fixture["cases"].append({
+        "id": "spelling-variant", "scope": "project-a", "query": "favorite color",
+        "relevant_note_ids": ["spelling"], "stale_note_ids": [],
+        "forbidden_scopes": ["project-b"], "expected_facts": [], "forbidden_facts": [],
+        "expected_abstention": True,
+    })
+    from above_all.evals import compare_retrievers
+    report = compare_retrievers(fixture)
+    assert report["baseline_backend"] == "sqlite_fts"
+    assert report["candidate_backend"] == "sqlite_hybrid"
+    assert report["delta"]["recall_at_k"] > 0
+    assert report["recommendation"]["enable_by_default"] is False

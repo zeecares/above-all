@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from above_all.db import GLOBAL_MIGRATIONS
+
 CLI = [sys.executable, "-m", "above_all.cli"]
 
 FAKE_AGENT = """
@@ -345,7 +347,7 @@ def test_cli_migrates_historical_global_store(world: World):
     world.init()
     upgraded = world.global_db()
     versions = {r[0] for r in upgraded.execute("SELECT version FROM schema_migrations")}
-    assert versions == {1, 2, 3, 4}
+    assert versions == set(range(1, len(GLOBAL_MIGRATIONS) + 1))
     assert upgraded.execute("SELECT id FROM watches").fetchone()["id"] == "w1"
     upgraded.execute("SELECT COUNT(*) FROM notes").fetchone()
     upgraded.close()
@@ -384,3 +386,4 @@ def test_wheel_install_init_includes_example_configs(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert (home / "agent.toml").is_file()
     assert (home / "routing.toml").is_file()
+

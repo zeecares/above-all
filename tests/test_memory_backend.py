@@ -222,3 +222,62 @@ def test_concurrent_direct_approvals_serialize_revalidation(tmp_path):
     assert "duplicates active" in results[1]
     assert second.exists()
     assert second_db.execute("SELECT COUNT(*) FROM notes WHERE status='active'").fetchone()[0] == 1
+
+
+
+def test_hybrid_is_opt_in_and_fts_stays_default():
+    assert get_backend().name == "sqlite_fts"
+    assert get_backend("sqlite_hybrid").name == "sqlite_hybrid"
+
+
+def test_hybrid_finds_spelling_variant_that_fts_misses(tmp_path):
+    scope, db = make_scope(tmp_path)
+    add_active_note(db, scope, title="Preference", body="The favourite colour is ultramarine")
+    assert get_backend("sqlite_fts").search(db, "favorite color") == []
+    results = get_backend("sqlite_hybrid").search(db, "favorite color")
+    assert results[0]["title"] == "Preference"
+
+
+def test_hybrid_never_indexes_candidate_stale_or_superseded_notes(tmp_path):
+    scope, db = make_scope(tmp_path)
+    backend = get_backend("sqlite_hybrid")
+    candidate = backend.create_candidate(scope, title="Candidate", body="secret zebra", note_type="fact", sources=["x"])
+    assert backend.search(db, "secret zebra") == []
+    active = backend.approve(db, scope, candidate.stem)
+    assert backend.search(db, "secret zebra")
+    from above_all.notes import set_note_status
+    set_note_status(active, "superseded")
+    index_note(db, active)
+    assert backend.search(db, "secret zebra") == []
+    assert db.execute("SELECT COUNT(*) FROM note_embeddings").fetchone()[0] == 0
+
+
+
+def test_hybrid_exclusion_pins_are_independent(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    from above_all.hybrid import sync_embedding
+    from above_all.notes import set_note_status
+    scope, db = make_scope(tmp_path)
+    backend = get_backend("sqlite_hybrid")
+
+    # Candidate content does not enter either index before approval.
+    candidate = backend.create_candidate(scope, title="Candidate", body="candidatequokka", note_type="fact", sources=["x"])
+    assert candidate.parent.name == "candidates"
+    assert backend.search(db, "candidatequokka") == []
+
+    # A stale active note is removed from both indexes on indexing.
+    stale = add_active_note(db, scope, title="Stale", body="stalewombat")
+    stale_path = scope / "notes" / f"{stale}.md"
+    text = stale_path.read_text().replace("stale_after: null", f"stale_after: {(datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()}")
+    stale_path.write_text(text)
+    index_note(db, stale_path)
+    assert backend.search(db, "stalewombat") == []
+
+    # A superseded note cannot leak even if derived state is maliciously restored.
+    active = add_active_note(db, scope, title="Old", body="supersededpangolin")
+    active_path = scope / "notes" / f"{active}.md"
+    set_note_status(active_path, "superseded")
+    index_note(db, active_path)
+    sync_embedding(db, active, "Old", "supersededpangolin", active=True)
+    assert backend.search(db, "supersededpangolin") == []

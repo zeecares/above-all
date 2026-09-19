@@ -96,3 +96,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_claims_fts USING fts5(claim_id UNIN
 """
 GLOBAL_MIGRATIONS.append(_KNOWLEDGE_MAP)
 PROJECT_MIGRATIONS.append(_KNOWLEDGE_MAP)
+
+
+
+# Optional local hashed embeddings. Derived only from indexed active, fresh notes.
+_HYBRID = """CREATE TABLE IF NOT EXISTS note_embeddings (note_id TEXT PRIMARY KEY, vector_json TEXT NOT NULL, embedded_at TEXT NOT NULL, FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE);
+"""
+GLOBAL_MIGRATIONS.append(_HYBRID)
+PROJECT_MIGRATIONS.append(_HYBRID)

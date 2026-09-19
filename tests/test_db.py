@@ -67,7 +67,7 @@ def test_weekend4_v2_global_db_migrates_forward(tmp_path):
     seed.close()
 
     db = migrate(path, GLOBAL_MIGRATIONS)
-    assert _applied_versions(db) == {1, 2, 3, 4}
+    assert _applied_versions(db) == {1, 2, 3, 4, 5}
     assert {"notes", "notes_fts", "watches", "proactive_events"} <= _table_names(db)
     assert db.execute("SELECT id FROM watches").fetchall()[0][0] == "w1"
     # Notes store is usable after the upgrade.
@@ -100,7 +100,7 @@ def test_overlay_window_global_db_migrates_forward(tmp_path):
     seed.close()
 
     db = migrate(path, GLOBAL_MIGRATIONS)
-    assert _applied_versions(db) == {1, 2, 3, 4}
+    assert _applied_versions(db) == {1, 2, 3, 4, 5}
     assert {"notes", "notes_fts", "watches", "proactive_events"} <= _table_names(db)
     assert db.execute("SELECT id FROM watches").fetchall()[0][0] == "w9"
     assert db.execute("SELECT id FROM notes").fetchall()[0][0] == "n9"
@@ -122,7 +122,7 @@ def test_legacy_untracked_global_db_is_adopted(tmp_path):
     ).fetchall() == []
 
     db = migrate(path, GLOBAL_MIGRATIONS)
-    assert _applied_versions(db) == {1, 2, 3, 4}
+    assert _applied_versions(db) == {1, 2, 3, 4, 5}
     assert {"outcomes", "watches", "notes", "notes_fts"} <= _table_names(db)
     db.close()
 

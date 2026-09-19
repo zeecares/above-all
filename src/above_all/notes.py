@@ -97,6 +97,12 @@ def index_note(db, path: Path) -> str:
         from .knowledge import sync_note_map
 
         sync_note_map(db, path, note)
+        from .hybrid import sync_embedding
+
+        sync_embedding(
+            db, note_id, title, note.body,
+            active=note.metadata["status"] == "active" and not note.stale,
+        )
     return note_id
 
 
