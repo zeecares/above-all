@@ -196,6 +196,45 @@ def _finish(manifest: dict, status: str, summary: str) -> None:
     )
 
 
+def _harvest(manifest: dict, summary: str) -> bool:
+    """Run the idempotent exit harvest and durably mark its completion."""
+    session_dir = Path(manifest["session_dir"])
+    try:
+        from .config import load_agent_config
+        from .memory_backend import get_backend
+        from .session_wrapper import _exit_harvest
+
+        project_root = None
+        if len(manifest["scopes"]) > 1:
+            project_root = Path(manifest["scopes"][1][0]).parent
+        scopes = Scopes(Path(manifest["scopes"][0][0]).parent, project_root)
+        backend = get_backend(load_agent_config(scopes.global_root).get("memory", {}).get("backend"))
+        warnings = _exit_harvest(
+            scopes,
+            {
+                "id": manifest["session_id"],
+                "provider": manifest["provider"],
+                "mode": "headless",
+                "outcome_id": manifest["outcome_id"],
+                "started_at": manifest["started_at"],
+                "source_path": manifest["session_dir"],
+            },
+            summary,
+            backend,
+            note_extra={
+                "observer": "above-all",
+                "subject": project_root.parent.name if project_root else "global",
+            },
+        )
+        (session_dir / "harvest.json").write_text(
+            json.dumps({"status": "done", "warnings": warnings}, indent=2) + "\n"
+        )
+        return True
+    except Exception as exc:  # outcome is already durable; reconcile will retry harvest
+        (session_dir / "harvest-error.log").write_text(f"{type(exc).__name__}: {exc}\n")
+        return False
+
+
 def run_worker(manifest_path: Path) -> int:
     manifest = json.loads(manifest_path.read_text())
     session_dir = Path(manifest["session_dir"])
@@ -234,37 +273,7 @@ def run_worker(manifest_path: Path) -> int:
     except OSError as exc:
         status, summary, code = "blocked", f"command launch failed: {exc}", 127
     _finish(manifest, status, summary)
-
-    # Headless sessions use the same exit harvest as interactive sessions. The
-    # detached worker owns this step because the launching CLI has already
-    # returned. This creates a review-only memory candidate and imports an
-    # explicit wrapper-owned Claude Code transcript when one exists.
-    from .config import load_agent_config
-    from .memory_backend import get_backend
-    from .session_wrapper import _exit_harvest
-
-    project_root = None
-    if len(manifest["scopes"]) > 1:
-        project_root = Path(manifest["scopes"][1][0]).parent
-    scopes = Scopes(Path(manifest["scopes"][0][0]).parent, project_root)
-    backend = get_backend(load_agent_config(scopes.global_root).get("memory", {}).get("backend"))
-    _exit_harvest(
-        scopes,
-        {
-            "id": manifest["session_id"],
-            "provider": manifest["provider"],
-            "mode": "headless",
-            "outcome_id": manifest["outcome_id"],
-            "started_at": manifest["started_at"],
-            "source_path": manifest["session_dir"],
-        },
-        summary,
-        backend,
-        note_extra={
-            "observer": "above-all",
-            "subject": project_root.parent.name if project_root else "global",
-        },
-    )
+    _harvest(manifest, summary)
     return code
 
 
@@ -272,16 +281,25 @@ def reconcile(scopes: Scopes) -> list[dict]:
     """Mark orphaned pending/running work blocked, preserving its streamed logs."""
     db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
     rows = db.execute(
-        "SELECT s.id,s.outcome_id,s.source_path FROM sessions s JOIN outcomes o ON o.id=s.outcome_id WHERE o.status IN ('pending','running')"
+        "SELECT s.id,s.outcome_id,s.source_path,o.status FROM sessions s "
+        "JOIN outcomes o ON o.id=s.outcome_id"
     ).fetchall()
     db.close()
     reconciled = []
-    for session_id, outcome_id, source_path in rows:
+    for session_id, outcome_id, source_path, outcome_status in rows:
         root = Path(source_path)
         manifest_path = root / "worker.json"
         if not manifest_path.is_file():
             continue
         manifest = json.loads(manifest_path.read_text())
+        if outcome_status not in {"pending", "running"}:
+            if (root / "harvest.json").is_file():
+                continue
+            result_path = root / "result.json"
+            if result_path.is_file():
+                result = json.loads(result_path.read_text())
+                _harvest(manifest, result.get("summary") or "")
+            continue
         pid_path = root / "worker.pid"
         if not pid_path.exists():
             # Acceptance is committed before Popen and its pid-file write. Do not
