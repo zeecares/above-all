@@ -387,3 +387,28 @@ def test_wheel_install_init_includes_example_configs(tmp_path: Path):
     assert (home / "agent.toml").is_file()
     assert (home / "routing.toml").is_file()
 
+
+
+def test_headless_worker_harvests_candidate_trace_and_usage(world: World):
+    world.init()
+    world.configure_fake_agent()
+    out = json.loads(world.cli("do", "headless harvest proof").stdout)
+    def imported():
+        db = world.global_db()
+        try:
+            return db.execute(
+                "SELECT COUNT(*) c FROM trace_usage WHERE session_id=?", (out["session_id"],)
+            ).fetchone()["c"] == 1
+        except sqlite3.OperationalError:
+            return False
+        finally:
+            db.close()
+
+    assert _wait_for(imported)
+    candidates = json.loads(world.cli("note", "candidates").stdout)
+    assert [item["title"] for item in candidates] == [
+        f"Session {out['session_id']} summary"
+    ]
+    status = json.loads(world.cli("status", "--json").stdout)
+    assert status["tokens_in"] == 10
+    assert status["tokens_out"] == 5
