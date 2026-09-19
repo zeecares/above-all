@@ -148,7 +148,7 @@ def check_delivery(scope_dir: Path, provider: str, *, now: datetime | None = Non
     result = {"provider": spec.name, "file": str(target), "manifest": manifest is not None}
     if not target.is_file():
         return result | {"status": "missing", "detail": "no delivered file"}
-    text = target.read_text(encoding="utf-8")
+    text = target.read_bytes().decode("utf-8")
     matches = _section_matches(text)
     if len(matches) > 1:
         return result | {
@@ -207,7 +207,7 @@ def deliver(
     eligible = [note["id"] for note in notes]
 
     if target.is_file():
-        text = target.read_text(encoding="utf-8")
+        text = target.read_bytes().decode("utf-8")
         matches = _section_matches(text)
         if len(matches) > 1:
             raise ValueError("multiple above-all managed sections found; refusing ambiguous rewrite")
@@ -248,7 +248,7 @@ def deliver(
         new_text = f"{BEGIN}\n{section}\n{END}\n"
 
     staged = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
-    staged.write_text(new_text, encoding="utf-8")
+    staged.write_bytes(new_text.encode("utf-8"))
     os.replace(staged, target)
     _write_manifest(
         scope_dir,
@@ -350,7 +350,7 @@ def import_provider_memory(
             _normalize_claim(parse_note((candidates_dir / f"{item['id']}.md").read_text()).body)
         )
 
-    blocks = _import_blocks(target.read_text(encoding="utf-8"))
+    blocks = _import_blocks(target.read_bytes().decode("utf-8"))
     created: list[dict] = []
     skipped = 0
     for title, body in blocks[:MAX_IMPORT_BLOCKS]:
