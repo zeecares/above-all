@@ -1,0 +1,579 @@
+from __future__ import annotations
+
+import argparse
+import json
+from importlib.resources import files
+from pathlib import Path
+
+from .agent_context import generate_agent_context
+from .analysis import analyze
+from .async_outcomes import launch_async, reconcile
+from .config import configured_command, load_agent_config
+from .consolidation import apply_changeset, daily_expiry_sweep, pollution_metrics, propose_weekly
+from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
+from .delivery import check_delivery, deliver, import_provider_memory
+from .doctor import run_doctor, run_status
+from .evals import check_thresholds, compare_retrievers, evaluate_fixture, load_fixture
+from .memory_backend import get_backend
+from .notes import create_note, index_note, list_candidates, search_notes
+from .operations import run_maintenance
+from .paths import resolve_scopes
+from .privacy import ensure_project_privacy, validate_project_privacy
+from .proactivity import create_watch, due_watches, fire_watch, value_gate
+from .routing import load_routing, route
+from .session_wrapper import wrap_interactive
+from .skills import discover, load_selected
+from .trace_export import ExportSelection, export_traces
+
+
+def init_scopes(project: bool = True, share_approved: bool = False):
+    scopes = resolve_scopes()
+    migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS).close()
+    scopes.global_root.mkdir(parents=True, exist_ok=True)
+    examples = files("above_all") / "config"
+    for name in ("routing", "agent"):
+        target = scopes.global_root / f"{name}.toml"
+        example = examples / f"{name}.example.toml"
+        if not example.is_file():
+            source_example = Path(__file__).parents[2] / "config" / f"{name}.example.toml"
+            if source_example.is_file():
+                example = source_example
+        if not target.exists() and example.is_file():
+            target.write_bytes(example.read_bytes())
+    if project and scopes.project_root:
+        ensure_project_privacy(scopes.project_root.parent, share_approved)
+        migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS).close()
+        (scopes.project_root / "notes").mkdir(parents=True, exist_ok=True)
+        (scopes.project_root / "candidates").mkdir(parents=True, exist_ok=True)
+    return scopes
+
+
+def _strip_separator(cmd: list[str]) -> list[str]:
+    return cmd[1:] if cmd[:1] == ["--"] else cmd
+
+
+def parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="above-all")
+    sub = p.add_subparsers(dest="command", required=True)
+    init = sub.add_parser("init")
+    init.add_argument(
+        "--share-approved",
+        action="store_true",
+        help="allow approved project notes and generated context to be committed",
+    )
+    privacy = sub.add_parser("privacy-check")
+    privacy.add_argument(
+        "--share-approved",
+        action="store_true",
+        help="validate the exact approved-note sharing surface",
+    )
+    sub.add_parser("scope")
+    sub.add_parser("sessions")
+    trace = sub.add_parser("trace")
+    ts = trace.add_subparsers(dest="trace_command", required=True)
+    export = ts.add_parser("export")
+    export.add_argument("--session-id", action="append", default=[])
+    export.add_argument("--outcome-id")
+    export.add_argument("--project")
+    export.add_argument("--since")
+    export.add_argument("--until")
+    export.add_argument("--output", type=Path, required=True)
+    doc = sub.add_parser("doctor")
+    doc.add_argument("--json", action="store_true")
+    st = sub.add_parser("status")
+    st.add_argument("--json", action="store_true")
+    sub.add_parser("reconcile")
+    r = sub.add_parser("route")
+    r.add_argument("level", choices=("mechanical", "routine", "judgment", "high_stakes"))
+    r.add_argument("--signal", action="append", default=[])
+    d = sub.add_parser("do")
+    d.add_argument("intent")
+    d.add_argument("--constraint", action="append", default=[])
+    d.add_argument("--source", action="append", default=[])
+    d.add_argument("--outcome-id")
+    d.add_argument("--skill", action="append", default=[])
+    d.add_argument("cmd", nargs=argparse.REMAINDER)
+    w = sub.add_parser("work")
+    w.add_argument("--skill", action="append", default=[])
+    w.add_argument("cmd", nargs=argparse.REMAINDER)
+    sk = sub.add_parser("skills")
+    sk.add_argument("--json", action="store_true")
+    maintenance = sub.add_parser("maintenance")
+    maintenance.add_argument("--weekly", action="store_true")
+    maintenance.add_argument("--max-candidates", type=int, default=100)
+    consolidation = sub.add_parser("consolidate")
+    cs = consolidation.add_subparsers(dest="consolidate_command", required=True)
+    cs.add_parser("sweep")
+    weekly = cs.add_parser("weekly")
+    weekly.add_argument("--max-candidates", type=int, default=100)
+    apply = cs.add_parser("apply")
+    apply.add_argument("path")
+    apply.add_argument("--approve", action="store_true")
+    cs.add_parser("pollution")
+    watches = sub.add_parser("watch")
+    ws = watches.add_subparsers(dest="watch_command", required=True)
+    create = ws.add_parser("create")
+    create.add_argument("kind")
+    create.add_argument("spec_json")
+    create.add_argument("--next-fire")
+    create.add_argument("--policy", default="value-gated")
+    ws.add_parser("list")
+    fire = ws.add_parser("fire")
+    fire.add_argument("watch_id")
+    fire.add_argument("payload_json")
+    fire.add_argument("--value")
+    ws.add_parser("drain")
+    evaluation = sub.add_parser("eval")
+    evaluation.add_argument("fixture", type=Path)
+    evaluation.add_argument("--k", type=int)
+    evaluation.add_argument("--thresholds", type=Path)
+    evaluation.add_argument("--output", type=Path)
+    evaluation.add_argument("--json", action="store_true")
+    evaluation.add_argument("--compare-backends", action="store_true")
+    dlv = sub.add_parser("deliver")
+    dlv.add_argument("--provider", required=True)
+    dlv.add_argument("--check", action="store_true")
+    dlv.add_argument("--force", action="store_true")
+    dlv.add_argument("--budget", type=int, default=4000)
+    dlv.add_argument("--ttl-days", type=int, default=7)
+    imp = sub.add_parser("import")
+    imp.add_argument("--provider", required=True)
+    imp.add_argument("--path", type=Path)
+    analysis = sub.add_parser("analyze")
+    analysis.add_argument("--min-completed", type=int, default=3)
+    n = sub.add_parser("note")
+    ns = n.add_subparsers(dest="note_command", required=True)
+    add = ns.add_parser("add")
+    add.add_argument("title")
+    add.add_argument("body")
+    add.add_argument("--type", default="fact")
+    add.add_argument("--source", action="append", required=True)
+    add.add_argument("--stale-after")
+    search = ns.add_parser("search")
+    search.add_argument("query")
+    ns.add_parser("candidates")
+    approve = ns.add_parser("approve")
+    approve.add_argument("candidate_id")
+    approve.add_argument("--replace")
+    approve.add_argument("--contradicts", action="append", default=[])
+    discard = ns.add_parser("discard")
+    discard.add_argument("candidate_id")
+    ns.add_parser("context")
+    memory = sub.add_parser("memory")
+    ms = memory.add_subparsers(dest="memory_command", required=True)
+    why = ms.add_parser("why", aliases=["explain"])
+    why.add_argument("query")
+    return p
+
+
+def _run_init(args, scopes) -> None:
+    scopes = init_scopes(share_approved=args.share_approved)
+    print(
+        json.dumps(
+            {
+                "global": str(scopes.global_root),
+                "project": str(scopes.project_root) if scopes.project_root else None,
+            }
+        )
+    )
+
+
+def _run_privacy_check(args, scopes) -> None:
+    if not scopes.project_root:
+        raise SystemExit("privacy-check requires a Git project")
+    print(json.dumps(validate_project_privacy(scopes.project_root.parent, args.share_approved)))
+
+
+def _run_scope(args, scopes) -> None:
+    print(
+        json.dumps(
+            {
+                "global": str(scopes.global_root),
+                "project": str(scopes.project_root) if scopes.project_root else None,
+            }
+        )
+    )
+
+
+def _run_route(args, scopes) -> None:
+    selected = route(
+        load_routing(scopes.global_root / "routing.toml"), args.level, set(args.signal)
+    )
+    print(json.dumps(selected.__dict__))
+
+
+def _run_doctor(args, scopes) -> None:
+    report = run_doctor(scopes)
+    if args.json:
+        print(json.dumps(report))
+    else:
+        for check in report["checks"]:
+            print(f"{check['status'].upper():4}  {check['name']}: {check['detail']}")
+            if check["fix"]:
+                print(f"      fix: {check['fix']}")
+    if not report["ok"]:
+        raise SystemExit(1)
+
+
+def _run_status(args, scopes) -> None:
+    report = run_status(scopes)
+    if args.json:
+        print(json.dumps(report, default=str))
+    elif not report["initialized"]:
+        print(f"above-all not initialized for {report['scope']} - {report['hint']}")
+    else:
+        outcomes = report["outcomes"]
+        print(f"scope: {report['scope']}")
+        print(
+            "outcomes: " + ", ".join(f"{k}={v}" for (k, v) in sorted(outcomes.items()) if k)
+            if outcomes
+            else "outcomes: none"
+        )
+        print(
+            f"sessions: {report['sessions']} (tokens in {report['tokens_in']}, out {report['tokens_out']})"
+        )
+        print(
+            f"watches: {report['watches']['total']} total, {report['watches']['due']} due, next {report['watches']['next_fire_at'] or 'none scheduled'}"
+        )
+        print(
+            f"reviews: {report['candidates']} candidates, {report['proposed_changesets']} proposed changesets"
+        )
+        print(f"warnings: {report['warnings']}, blocked outcomes: {report['blocked_outcomes']}")
+
+
+def _run_eval(args, scopes) -> None:
+    fixture = load_fixture(args.fixture)
+    report = (
+        compare_retrievers(fixture, k=args.k)
+        if args.compare_backends
+        else evaluate_fixture(fixture, k=args.k)
+    )
+    failures = []
+    if args.thresholds:
+        failures = check_thresholds(report, load_fixture(args.thresholds))
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    if args.compare_backends:
+        print(json.dumps(report, indent=None if args.json else 2, sort_keys=True))
+    elif args.json:
+        print(json.dumps(report, sort_keys=True))
+    else:
+        retrieval = report["retrieval"]
+        answers = report["answers"]
+        print(f"cases: {report['case_count']}, k={report['k']}")
+        print(
+            f"retrieval: precision@k={retrieval['precision_at_k']:.3f} recall@k={retrieval['recall_at_k']:.3f} mrr={retrieval['mrr']:.3f}"
+        )
+        print(
+            f"leakage: stale={retrieval['stale_leakage_rate']:.3f} cross-project={retrieval['cross_project_leakage_rate']:.3f}"
+        )
+        print(
+            f"answers: factual={answers['factual_accuracy']:.3f} unsupported={answers['unsupported_claim_rate']:.3f} abstention={answers['abstention_accuracy']:.3f} (labeled={answers['evaluated_case_count']})"
+        )
+        paired = report["with_memory_vs_no_memory"]
+        print(f"paired comparisons: {paired['sample_count']}")
+        for name in ("input_tokens", "output_tokens", "cached_tokens", "cost_usd", "latency_ms"):
+            value = paired[name]
+            (low, high) = value["confidence_interval_95"]
+            print(f"  {name}: delta={value['mean_delta']:.3f}, 95% CI [{low:.3f}, {high:.3f}]")
+        for limitation in report["limitations"]:
+            print(f"caveat: {limitation}")
+    if failures:
+        for failure in failures:
+            print(f"threshold failure: {failure}")
+        raise SystemExit(1)
+
+
+def _run_trace(args, scopes) -> None:
+    init_scopes()
+    global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    project_db = (
+        migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+        if scopes.project_root
+        else None
+    )
+    stores = [(global_db, "global", None)]
+    if project_db is not None:
+        stores.append((project_db, "project", scopes.project_root.parent.name))
+    try:
+        selection = ExportSelection(
+            tuple(args.session_id), args.outcome_id, args.project, args.since, args.until
+        )
+        result = export_traces(stores, args.output, selection)
+    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+        raise SystemExit(str(exc)) from exc
+    finally:
+        global_db.close()
+        if project_db is not None:
+            project_db.close()
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def _run_sessions(args, scopes) -> None:
+    init_scopes()
+    global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    rows = global_db.execute("SELECT * FROM sessions ORDER BY started_at DESC LIMIT 20")
+    print(json.dumps([dict(r) for r in rows], default=str))
+
+
+def _run_skills(args, scopes) -> None:
+    items = discover(scopes.global_root, scopes.project_root)
+    print(
+        json.dumps(
+            [
+                {"name": x.name, "description": x.description, "path": str(x.path)}
+                for x in items.values()
+            ]
+        )
+    )
+
+
+def _run_analyze(args, scopes) -> None:
+    init_scopes()
+    db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    try:
+        print(json.dumps(analyze(db, scopes.global_root / "analysis", args.min_completed)))
+    finally:
+        db.close()
+
+
+def _run_maintenance_consolidate_watch(args, scopes) -> None:
+    init_scopes()
+    scope = scopes.project_root or scopes.global_root
+    db = migrate(
+        scope / "assistant.db", PROJECT_MIGRATIONS if scopes.project_root else GLOBAL_MIGRATIONS
+    )
+    try:
+        if args.command == "maintenance":
+            result = run_maintenance(db, scope, args.weekly, args.max_candidates)
+        elif args.command == "consolidate":
+            if args.consolidate_command == "sweep":
+                result = daily_expiry_sweep(db, scope)
+            elif args.consolidate_command == "weekly":
+                result = {
+                    "path": str(
+                        propose_weekly(
+                            db, scope, scope / "changesets", max_candidates=args.max_candidates
+                        )
+                    )
+                }
+            elif args.consolidate_command == "apply":
+                result = apply_changeset(db, scope, Path(args.path), approve=args.approve)
+            else:
+                result = pollution_metrics(db, scope)
+        elif args.watch_command == "create":
+            result = {
+                "id": create_watch(
+                    db, args.kind, json.loads(args.spec_json), args.next_fire, args.policy
+                )
+            }
+        elif args.watch_command == "list":
+            result = {"watches": due_watches(db, "9999-12-31T23:59:59+00:00")}
+        elif args.watch_command == "fire":
+            result = {
+                "event_id": fire_watch(db, args.watch_id, json.loads(args.payload_json), args.value)
+            }
+        else:
+            result = value_gate(db)
+        print(json.dumps(result))
+    finally:
+        db.close()
+
+
+def _run_deliver_import(args, scopes) -> None:
+    if not scopes.project_root:
+        raise SystemExit(f"{args.command} requires a Git project")
+    init_scopes()
+    backend = get_backend(load_agent_config(scopes.global_root).get("memory", {}).get("backend"))
+    global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+    db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+    try:
+        if args.command == "deliver" and args.check:
+            result = check_delivery(scopes.project_root, args.provider)
+        elif args.command == "deliver":
+            result = deliver(
+                scopes.project_root,
+                db,
+                backend,
+                global_db,
+                provider=args.provider,
+                force=args.force,
+                budget_bytes=args.budget,
+                ttl_days=args.ttl_days,
+            )
+        else:
+            result = import_provider_memory(
+                scopes.project_root, db, backend, global_db, provider=args.provider, path=args.path
+            )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if isinstance(result, dict) and result.get("status") in {
+            "refused",
+            "drifted",
+            "no-manifest",
+        }:
+            raise SystemExit(1)
+    finally:
+        global_db.close()
+        db.close()
+
+
+def _run_do(args, scopes) -> None:
+    init_scopes()
+    config = load_agent_config(scopes.global_root)
+    cmd = _strip_separator(args.cmd) or configured_command(config, "headless")
+    if not cmd:
+        raise SystemExit("no headless command: pass `-- <cmd...>` or configure agent.toml")
+    result = launch_async(
+        scopes,
+        cmd,
+        args.intent,
+        provider=config.get("agent_cli", {}).get("provider", "unknown"),
+        outcome_id=args.outcome_id,
+    )
+    print(
+        json.dumps(
+            {
+                "session_id": result.session_id,
+                "outcome_id": result.outcome_id,
+                "status": result.status,
+                "pid": result.pid,
+                "session_dir": str(result.session_dir),
+            }
+        )
+    )
+
+
+def _run_reconcile(args, scopes) -> None:
+    init_scopes()
+    print(json.dumps(reconcile(scopes)))
+
+
+def _run_work(args, scopes) -> None:
+    init_scopes()
+    config = load_agent_config(scopes.global_root)
+    backend = get_backend(config.get("memory", {}).get("backend"))
+    cmd = _strip_separator(args.cmd) or configured_command(config, "interactive")
+    if not cmd:
+        raise SystemExit("no interactive command: pass `-- <cmd...>` or configure agent.toml")
+    selected = load_selected(scopes.global_root, scopes.project_root, args.skill)
+    skill_text = "\n\n".join(f"# {x.name}\n\n{x.body}" for x in selected)
+    result = wrap_interactive(
+        scopes,
+        cmd,
+        backend,
+        provider=config.get("agent_cli", {}).get("provider", "unknown"),
+        skill_text=skill_text,
+    )
+    print(
+        json.dumps(
+            {
+                "session_id": result.session_id,
+                "status": result.status,
+                "exit_code": result.exit_code,
+                "summary": result.summary,
+                "warnings": result.warnings,
+                "session_dir": str(result.session_dir),
+            }
+        )
+    )
+
+
+def _run_memory(args, scopes) -> None:
+    if not scopes.project_root:
+        raise SystemExit("memory commands require a Git project")
+    from .knowledge import why
+
+    db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+    print(json.dumps(why(db, args.query)))
+
+
+def _run_note(args, scopes) -> None:
+    if args.note_command == "add":
+        if not scopes.project_root:
+            raise SystemExit("note commands require a Git project")
+        init_scopes()
+        path = create_note(
+            scopes.project_root / "notes",
+            args.title,
+            args.body,
+            args.type,
+            args.source,
+            args.stale_after,
+        )
+        db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+        index_note(db, path)
+        print(path)
+    elif args.note_command == "search":
+        if not scopes.project_root:
+            raise SystemExit("note commands require a Git project")
+        db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+        print(json.dumps(search_notes(db, args.query)))
+    elif args.note_command in {"candidates", "approve", "discard", "context"}:
+        if not scopes.project_root:
+            raise SystemExit("note commands require a Git project")
+        init_scopes()
+        backend = get_backend(
+            load_agent_config(scopes.global_root).get("memory", {}).get("backend")
+        )
+        if args.note_command == "candidates":
+            print(json.dumps(list_candidates(scopes.project_root / "candidates")))
+        elif args.note_command == "approve":
+            db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+            print(
+                backend.approve(
+                    db,
+                    scopes.project_root,
+                    args.candidate_id,
+                    replaces=args.replace,
+                    contradicts=args.contradicts,
+                )
+            )
+        elif args.note_command == "discard":
+            print(backend.discard(scopes.project_root, args.candidate_id))
+        else:
+            global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+            db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+            try:
+                print(generate_agent_context(scopes.project_root, db, backend, global_db))
+            finally:
+                global_db.close()
+                db.close()
+
+
+COMMAND_HANDLERS = {
+    "analyze": _run_analyze,
+    "consolidate": _run_maintenance_consolidate_watch,
+    "deliver": _run_deliver_import,
+    "do": _run_do,
+    "doctor": _run_doctor,
+    "eval": _run_eval,
+    "import": _run_deliver_import,
+    "init": _run_init,
+    "maintenance": _run_maintenance_consolidate_watch,
+    "memory": _run_memory,
+    "note": _run_note,
+    "privacy-check": _run_privacy_check,
+    "reconcile": _run_reconcile,
+    "route": _run_route,
+    "scope": _run_scope,
+    "sessions": _run_sessions,
+    "skills": _run_skills,
+    "status": _run_status,
+    "trace": _run_trace,
+    "watch": _run_maintenance_consolidate_watch,
+    "work": _run_work,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    scopes = resolve_scopes()
+    COMMAND_HANDLERS[args.command](args, scopes)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
