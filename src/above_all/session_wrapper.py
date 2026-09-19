@@ -205,6 +205,7 @@ def _exit_harvest(
                 sources=[f"session:{session['id']}"]
                 + ([f"outcome:{session['outcome_id']}"] if session.get("outcome_id") else []),
                 extra=note_extra or {},
+                candidate_id=f"session-{session['id']}",
             )
         except (OSError, ValueError, sqlite3.Error) as exc:  # fail loud, keep the session record
             warning = f"candidate creation failed for session {session['id']}: {exc}"
@@ -215,6 +216,22 @@ def _exit_harvest(
         if trace_path and session.get("provider") == "claude_code":
             try:
                 result = import_claude_code_jsonl(global_db, trace_path, session["id"])
+                usage = global_db.execute(
+                    "SELECT tokens_in,tokens_out,reported_cost_usd FROM trace_usage WHERE session_id=?",
+                    (session["id"],),
+                ).fetchone()
+                if usage is not None:
+                    with global_db:
+                        global_db.execute(
+                            "UPDATE sessions SET tokens_in=?,tokens_out=?,cost_usd=? WHERE id=?",
+                            (*usage, session["id"]),
+                        )
+                    if project_db is not None:
+                        with project_db:
+                            project_db.execute(
+                                "UPDATE sessions SET tokens_in=?,tokens_out=?,cost_usd=? WHERE id=?",
+                                (*usage, session["id"]),
+                            )
                 _record_event(global_db, "trace_imported", session.get("outcome_id"), result)
             except (OSError, ValueError, sqlite3.Error) as exc:
                 warning = f"trace import failed for session {session['id']}: {exc}"

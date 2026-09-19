@@ -29,6 +29,7 @@ class MemoryBackend(Protocol):
         sources: list[str],
         stale_after: str | None = None,
         extra: dict | None = None,
+        candidate_id: str | None = None,
     ) -> Path:
         """Create a candidate note. Candidates are never active memory."""
         ...
@@ -57,7 +58,7 @@ class SqliteFtsBackend:
 
     name = "sqlite_fts"
 
-    def create_candidate(self, scope_dir, *, title, body, note_type, sources, stale_after=None, extra=None):
+    def create_candidate(self, scope_dir, *, title, body, note_type, sources, stale_after=None, extra=None, candidate_id=None):
         return _notes.create_candidate(
             scope_dir / "candidates",
             title,
@@ -66,6 +67,7 @@ class SqliteFtsBackend:
             sources,
             stale_after=stale_after,
             extra=extra,
+            candidate_id=candidate_id,
         )
 
     def search(self, db, query):
@@ -106,4 +108,3 @@ def get_backend(name: str | None = None) -> MemoryBackend:
             "mem0_oss is a later pluggable candidate pending trace evals - see spec/memory.md)"
         )
     return _BACKENDS[selected]()
-

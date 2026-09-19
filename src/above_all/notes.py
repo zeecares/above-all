@@ -146,10 +146,11 @@ def create_candidate(
     sources: list[str],
     stale_after: str | None = None,
     extra: dict | None = None,
+    candidate_id: str | None = None,
 ) -> Path:
     """Create a candidate note. Candidates are drafts awaiting review, never active memory."""
     candidates_dir.mkdir(parents=True, exist_ok=True)
-    note_id = uuid4().hex
+    note_id = candidate_id or uuid4().hex
     metadata = {
         "type": note_type,
         "sources": sources,
