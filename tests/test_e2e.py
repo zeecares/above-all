@@ -345,7 +345,7 @@ def test_cli_migrates_historical_global_store(world: World):
     world.init()
     upgraded = world.global_db()
     versions = {r[0] for r in upgraded.execute("SELECT version FROM schema_migrations")}
-    assert versions == {1, 2, 3}
+    assert versions == {1, 2, 3, 4}
     assert upgraded.execute("SELECT id FROM watches").fetchone()["id"] == "w1"
     upgraded.execute("SELECT COUNT(*) FROM notes").fetchone()
     upgraded.close()
