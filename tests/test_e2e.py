@@ -30,7 +30,7 @@ if session_dir:
         {"type": "user", "uuid": "u1", "timestamp": "2026-09-18T00:00:00Z",
          "message": {"content": "do the thing"}},
         {"type": "assistant", "uuid": "a1", "timestamp": "2026-09-18T00:00:01Z",
-         "message": {"content": [{"type": "text", "text": "done"}],
+         "message": {"content": [{"type": "text", "text": "`./health.sh` is the health command and should remain executable."}],
                      "usage": {"input_tokens": 10, "output_tokens": 5}}},
     ]
     with open(os.path.join(session_dir, "transcript.jsonl"), "w") as fh:
@@ -151,13 +151,13 @@ def test_init_then_work_harvest_approve_context_trace(world: World):
 
     # Approve through the write gate: candidate becomes active, searchable memory.
     world.cli("note", "approve", candidate_id)
-    found = json.loads(world.cli("note", "search", "interactive").stdout)
+    found = json.loads(world.cli("note", "search", "health").stdout)
     assert [row["id"] for row in found] == [candidate_id]
     assert not (world.scope / "candidates" / f"{candidate_id}.md").exists()
 
     context_path = Path(world.cli("note", "context").stdout.strip())
     context = context_path.read_text()
-    assert "interactive session" in context
+    assert "./health.sh" in context
     assert "_Source: project knowledge_" in context
     assert "unreviewed draft body" not in context
 
@@ -407,7 +407,7 @@ def test_headless_worker_harvests_candidate_trace_and_usage(world: World):
     assert _wait_for(imported)
     candidates = json.loads(world.cli("note", "candidates").stdout)
     assert [item["title"] for item in candidates] == [
-        f"Session {out['session_id']} summary"
+        f"Learned from session {out['session_id']}"
     ]
     status = json.loads(world.cli("status", "--json").stdout)
     assert status["tokens_in"] == 10
@@ -462,3 +462,4 @@ def test_reconcile_completed_outcome_with_missing_harvest(world: World):
     assert json.loads(world.cli("reconcile").stdout) == []
     assert candidate.is_file()
     assert (session_dir / "harvest.json").is_file()
+

@@ -96,13 +96,13 @@ def test_failing_command_records_failed_not_lost(repo):
     assert result.status == "failed" and result.exit_code == 3
     assert session_rows(repo.global_root / "assistant.db", result.session_id)
     candidates = list_candidates(repo.project_root / "candidates")
-    assert len(candidates) == 1  # candidate created even on failure
+    assert candidates == []  # no transcript fact: process boilerplate is suppressed
 
 
 def test_exit_creates_candidate_never_active_memory(repo):
     dispatch_headless(repo, [sys.executable, "-c", "pass"], "harvest me", get_backend())
     candidates = list_candidates(repo.project_root / "candidates")
-    assert len(candidates) == 1
+    assert candidates == []  # no useful trace, so no memory pollution
     db = migrate(repo.project_root / "assistant.db", PROJECT_MIGRATIONS)
     assert get_backend().search(db, "harvest") == []  # never active directly
     db.close()
@@ -430,4 +430,5 @@ def test_headless_envelope_preserves_scope_provenance(repo):
     envelope = json.loads((result.session_dir / "envelope.json").read_text())
     assert "Source: project knowledge" in prompt and "Source: global knowledge" in prompt
     assert {item["scope"] for item in envelope["relevant_notes"]} == {"global", "project"}
+
 
