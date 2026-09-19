@@ -82,3 +82,16 @@ labeled claims already in a fixture and makes no model call. Real-model replay
 can produce those observations later, opt-in, without making CI depend on a
 provider. This `recall@k` is true held-out retrieval recall and is distinct from
 the existing operational event proxy named `retrieval_recall`.
+
+
+## Optional measured hybrid retrieval
+
+`sqlite_fts` remains the default. To opt into the experimental local backend, set `memory.backend = "sqlite_hybrid"` in `~/.above-all/agent.toml`. It combines FTS5/BM25 with a 256-float local signed word/character n-gram hash using reciprocal-rank fusion. It makes no API calls and downloads no model. See `LICENSES-HYBRID.md` for the complete component and redistribution inventory.
+
+Measure it on the held-out fixture with:
+
+```bash
+above-all eval tests/fixtures/eval-golden.json --compare-backends --json
+```
+
+The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
