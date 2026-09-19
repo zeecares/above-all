@@ -28,6 +28,8 @@ Weekend 3 adds one narrow, tested trace plane:
 - `above-all analyze` is a quiet, SQL-first scaffold that emits system/user/eval candidate queues only after enough completed outcomes; it changes no routing or memory
 - model-neutral project skills live at `.above-all/skills/<name>/SKILL.md`, shadow global skills, validate `name` and the description/when-to-use trigger, and are injected through a session-scoped file only after explicit `--skill` selection
 
+Session memory extraction is bounded and review-only. For explicit stock Claude Code traces, exit harvest proposes a candidate from useful fact/procedure text in the final assistant answer and suppresses wrapper boilerplate or empty output. The deterministic fallback is deliberately narrow: it cannot infer a lesson hidden only in tool calls or intermediate reasoning. A provider-neutral routed-model seam may supply deeper extraction, but its output is still only a source-anchored candidate and provider failure falls back deterministically.
+
 Weekend 2 provides the headless/interactive session wrapper, handoff envelope, bounded approved context, session/outcome recording in both scopes, and candidate-only exit harvesting. The `MemoryBackend` interface keeps SQLite/FTS as the reference backend, with manual approve/replace/discard and preserved superseded evidence.
 
 Weekend 1 established CLI/project resolution, migrations, the work-state plane, OKF-lite notes, FTS5 with staleness filtering, and editable routing.
@@ -103,4 +105,5 @@ above-all eval tests/fixtures/eval-golden.json --compare-backends --json
 ```
 
 The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
+
 
