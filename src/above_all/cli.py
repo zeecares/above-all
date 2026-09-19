@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 result = import_provider_memory(
-                    scopes.project_root, db, backend,
+                    scopes.project_root, db, backend, global_db,
                     provider=args.provider, path=args.path,
                 )
             print(json.dumps(result, indent=2, sort_keys=True))
