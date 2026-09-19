@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from .agent_context import merged_active_notes
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
+from .extraction import extract_trace_candidate
 from .paths import Scopes
 from .traces import find_claude_transcript, import_claude_code_jsonl
 
@@ -196,26 +197,12 @@ def _exit_harvest(
         _record_event(global_db, "session_exited", session.get("outcome_id"), session)
         (Path(session["source_path"]) / "summary.md").write_text(summary + "\n", encoding="utf-8")
         scope_dir = scopes.project_root or scopes.global_root
-        try:
-            backend.create_candidate(
-                scope_dir,
-                title=f"Session {session['id']} summary",
-                body=summary,
-                note_type="summary",
-                sources=[f"session:{session['id']}"]
-                + ([f"outcome:{session['outcome_id']}"] if session.get("outcome_id") else []),
-                extra=note_extra or {},
-                candidate_id=f"session-{session['id']}",
-            )
-        except (OSError, ValueError, sqlite3.Error) as exc:  # fail loud, keep the session record
-            warning = f"candidate creation failed for session {session['id']}: {exc}"
-            _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
-            print(f"WARNING: {warning}", file=sys.stderr)
-            warnings.append(warning)
         trace_path = trace_path or find_claude_transcript(Path(session["source_path"]))
+        extraction = None
         if trace_path and session.get("provider") == "claude_code":
             try:
                 result = import_claude_code_jsonl(global_db, trace_path, session["id"])
+                extraction = extract_trace_candidate(trace_path, session["id"])
                 usage = global_db.execute(
                     "SELECT tokens_in,tokens_out,reported_cost_usd FROM trace_usage WHERE session_id=?",
                     (session["id"],),
@@ -234,7 +221,7 @@ def _exit_harvest(
                             )
                 _record_event(global_db, "trace_imported", session.get("outcome_id"), result)
             except (OSError, ValueError, sqlite3.Error) as exc:
-                warning = f"trace import failed for session {session['id']}: {exc}"
+                warning = f"trace import/extraction failed for session {session['id']}: {exc}"
                 _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
                 print(f"WARNING: {warning}", file=sys.stderr)
                 warnings.append(warning)
@@ -244,6 +231,45 @@ def _exit_harvest(
                 "trace_import_skipped",
                 session.get("outcome_id"),
                 {"session_id": session["id"], "reason": "no explicit stock Claude Code transcript"},
+            )
+
+        if extraction and extraction.body:
+            try:
+                candidate_id = f"session-{session['id']}"
+                candidate_path = scope_dir / "candidates" / f"{candidate_id}.md"
+                if not candidate_path.exists():
+                    backend.create_candidate(
+                        scope_dir,
+                        title=f"Learned from session {session['id']}",
+                        body=extraction.body,
+                        note_type="fact",
+                        sources=[f"session:{session['id']}", *extraction.evidence]
+                        + (
+                            [f"outcome:{session['outcome_id']}"]
+                            if session.get("outcome_id")
+                            else []
+                        ),
+                        extra={**(note_extra or {}), "extraction_method": extraction.method},
+                        candidate_id=candidate_id,
+                    )
+                    _record_event(
+                        global_db,
+                        "candidate_created",
+                        session.get("outcome_id"),
+                        {"session_id": session["id"], "method": extraction.method},
+                    )
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                warning = f"candidate creation failed for session {session['id']}: {exc}"
+                _record_event(global_db, "warning", session.get("outcome_id"), {"warning": warning})
+                print(f"WARNING: {warning}", file=sys.stderr)
+                warnings.append(warning)
+        else:
+            reason = extraction.reason if extraction else "no explicit supported transcript"
+            _record_event(
+                global_db,
+                "candidate_suppressed",
+                session.get("outcome_id"),
+                {"session_id": session["id"], "reason": reason},
             )
     finally:
         global_db.close()
