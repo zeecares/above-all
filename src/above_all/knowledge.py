@@ -78,12 +78,18 @@ def sync_note_map(db: sqlite3.Connection, path: Path, note: Note) -> None:
             raise ValueError("each entity must be a name or mapping with name")
         entity_id = _id(str(raw.get("id") or raw["name"]))
         entity_ids.add(entity_id)
-        db.execute(
-            "INSERT INTO knowledge_entities(id,name,entity_type,scope,status,note_id) VALUES (?,?,?,?,?,?) "
-            "ON CONFLICT(id) DO UPDATE SET name=excluded.name,entity_type=excluded.entity_type,"
-            "scope=excluded.scope,status=excluded.status,note_id=excluded.note_id",
-            (entity_id, str(raw["name"]), str(raw.get("type", "entity")), scope, status, note_id),
-        )
+        entity = (entity_id, str(raw["name"]), str(raw.get("type", "entity")), scope)
+        existing = db.execute(
+            "SELECT id,name,entity_type,scope FROM knowledge_entities WHERE id=?", (entity_id,)
+        ).fetchone()
+        if existing is not None and tuple(existing) != entity:
+            raise ValueError(f"entity {entity_id!r} conflicts with its append-only definition")
+        if existing is None:
+            db.execute(
+                "INSERT INTO knowledge_entities(id,name,entity_type,scope,status,note_id) "
+                "VALUES (?,?,?,?,?,?)",
+                (*entity, status, note_id),
+            )
 
     relations = note.metadata.get("relations", [])
     if not isinstance(relations, list):
@@ -157,3 +163,20 @@ def why(db: sqlite3.Connection, query: str) -> dict:
         (claim["id"],),
     )]
     return {"found": True, "claim": claim, "sources": sources, "edges": edges, "relations": relations}
+
+
+
+def delete_note_map(db: sqlite3.Connection, note_id: str) -> None:
+    """Remove a rolled-back note from every derived map table."""
+    claim_id = f"note:{note_id}"
+    db.execute("DELETE FROM knowledge_relations WHERE note_id=?", (note_id,))
+    db.execute("DELETE FROM knowledge_claim_edges WHERE from_claim_id=?", (claim_id,))
+    db.execute("DELETE FROM knowledge_claim_sources WHERE claim_id=?", (claim_id,))
+    db.execute("DELETE FROM knowledge_claims_fts WHERE claim_id=?", (claim_id,))
+    db.execute("DELETE FROM knowledge_claims WHERE id=?", (claim_id,))
+    db.execute(
+        "DELETE FROM knowledge_entities WHERE note_id=? "
+        "AND id NOT IN (SELECT subject_entity_id FROM knowledge_relations "
+        "UNION SELECT object_entity_id FROM knowledge_relations)",
+        (note_id,),
+    )
