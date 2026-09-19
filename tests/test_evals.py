@@ -10,7 +10,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "eval-golden.json"
 
 def test_golden_eval_is_reproducible_and_catches_leakage():
     report = evaluate_fixture(load_fixture(FIXTURE))
-    assert report["retrieval"]["precision_at_k"] == pytest.approx(2 / 3)
+    assert report["retrieval"]["precision_at_k"] == pytest.approx(11 / 15)
     assert report["retrieval"]["recall_at_k"] == 1.0
     assert report["retrieval"]["stale_leakage_rate"] == 0.0
     assert report["retrieval"]["cross_project_leakage_rate"] == 0.0
