@@ -75,7 +75,9 @@ def _write_manifest(scope_dir: Path, spec: ProviderSpec, manifest: dict) -> None
 
 
 def render_section(notes: list[dict], budget_bytes: int) -> tuple[str, list[str], bool]:
-    """Render approved notes into the managed section body within the size budget."""
+    """Render approved notes into the managed section body within the exact byte budget."""
+    if budget_bytes <= 0:
+        raise ValueError("delivery budget must be a positive number of bytes")
     parts = [
         "# Project context (managed by above-all)",
         "",
@@ -85,7 +87,9 @@ def render_section(notes: list[dict], budget_bytes: int) -> tuple[str, list[str]
         ),
         "",
     ]
-    used = len("\n".join(parts).encode("utf-8"))
+    section = "\n".join(parts).strip()
+    if len(section.encode("utf-8")) > budget_bytes:
+        raise ValueError("delivery budget is too small for the managed-section header")
     included: list[str] = []
     truncated = False
     for note in notes:
@@ -95,17 +99,16 @@ def render_section(notes: list[dict], budget_bytes: int) -> tuple[str, list[str]
                 f"note {note['id']!r} contains an above-all managed-section marker; "
                 "refusing to render because it would corrupt section extraction"
             )
-        if body.startswith("# "):  # body already carries its H1; drop the duplicate
+        if body.startswith("# "):
             body = body.split("\n", 1)[1].strip() if "\n" in body else ""
-        block = f"## {note['title']}\n\n_Source: {note['scope']} knowledge, note {note['id']}_\n\n{body}\n"
-        size = len(block.encode("utf-8"))
-        if used + size > budget_bytes:
+        block = f"## {note['title']}\n\n_Source: {note['scope']} knowledge, note {note['id']}_\n\n{body}"
+        candidate = section + "\n" + block
+        if len(candidate.encode("utf-8")) > budget_bytes:
             truncated = True
             continue
-        parts.append(block)
-        used += size
+        section = candidate
         included.append(note["id"])
-    return "\n".join(parts).strip(), included, truncated
+    return section, included, truncated
 
 
 def _extract_section(text: str) -> str | None:
@@ -113,13 +116,22 @@ def _extract_section(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _section_matches(text: str) -> list[re.Match]:
+    return list(_SECTION_RE.finditer(text))
+
+
 def _replace_section(text: str, section: str) -> str:
     block = f"{BEGIN}\n{section}\n{END}"
-    if _SECTION_RE.search(text):
-        return _SECTION_RE.sub(lambda _: block, text)
-    if not text.strip():
+    matches = _section_matches(text)
+    if len(matches) > 1:
+        raise ValueError("multiple above-all managed sections found; refusing ambiguous rewrite")
+    if matches:
+        match = matches[0]
+        return text[: match.start()] + block + text[match.end() :]
+    if not text:
         return block + "\n"
-    return text.rstrip("\n") + "\n\n" + block + "\n"
+    separator = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+    return text + separator + block + "\n"
 
 
 def _manifest_fresh(manifest: dict, now: datetime) -> bool:
@@ -137,7 +149,13 @@ def check_delivery(scope_dir: Path, provider: str, *, now: datetime | None = Non
     if not target.is_file():
         return result | {"status": "missing", "detail": "no delivered file"}
     text = target.read_text(encoding="utf-8")
-    section = _extract_section(text)
+    matches = _section_matches(text)
+    if len(matches) > 1:
+        return result | {
+            "status": "ambiguous",
+            "detail": "multiple managed sections found; refusing to choose one",
+        }
+    section = matches[0].group(1) if matches else None
     if section is None:
         return result | {
             "status": "unmanaged",
@@ -178,6 +196,8 @@ def deliver(
     is missing, unless force=True. Content outside the markers is never edited.
     """
     now = now or _utcnow()
+    if ttl_days <= 0:
+        raise ValueError("delivery TTL must be a positive number of days")
     spec = get_provider(provider)
     target = scope_dir.parent / spec.context_filename
     notes = merged_active_notes(global_db or db, db if global_db else None, backend)
@@ -188,7 +208,10 @@ def deliver(
 
     if target.is_file():
         text = target.read_text(encoding="utf-8")
-        existing = _extract_section(text)
+        matches = _section_matches(text)
+        if len(matches) > 1:
+            raise ValueError("multiple above-all managed sections found; refusing ambiguous rewrite")
+        existing = matches[0].group(1) if matches else None
         if existing is not None:
             if manifest is None:
                 if not force:
@@ -210,6 +233,8 @@ def deliver(
             elif (
                 _hash(existing) == content_hash
                 and manifest.get("source_note_ids") == included
+                and manifest.get("budget_bytes") == budget_bytes
+                and manifest.get("ttl_days") == ttl_days
                 and _manifest_fresh(manifest, now)
             ):
                 return {
@@ -237,6 +262,7 @@ def deliver(
             "source_note_ids": included,
             "eligible_note_ids": eligible,
             "budget_bytes": budget_bytes,
+            "ttl_days": ttl_days,
             "truncated": truncated,
         },
     )
@@ -249,9 +275,19 @@ def deliver(
     }
 
 
+def _strip_managed_for_import(text: str) -> str:
+    """Remove managed bytes conservatively, including a drifted/unclosed section."""
+    unmanaged = _SECTION_RE.sub("", text)
+    if BEGIN in unmanaged:
+        unmanaged = unmanaged.split(BEGIN, 1)[0]
+    if END in unmanaged:
+        unmanaged = unmanaged.split(END, 1)[1]
+    return unmanaged
+
+
 def _import_blocks(text: str) -> list[tuple[str, str]]:
     """Split unmanaged text into (title, body) blocks on markdown headings."""
-    unmanaged = _SECTION_RE.sub("", text)
+    unmanaged = _strip_managed_for_import(text)
     blocks: list[tuple[str, str]] = []
     current_title: str | None = None
     current: list[str] = []
@@ -272,6 +308,7 @@ def import_provider_memory(
     scope_dir: Path,
     db: sqlite3.Connection,
     backend,
+    global_db: sqlite3.Connection | None = None,
     *,
     provider: str,
     path: Path | None = None,
@@ -287,19 +324,25 @@ def import_provider_memory(
     if not target.is_file():
         return {"provider": spec.name, "file": str(target), "created": [], "skipped_duplicates": 0, "blocks": 0}
 
-    active_claims = {
-        _normalize_claim(row[0])
-        for row in db.execute("SELECT body FROM notes WHERE status='active'").fetchall()
-    }
-    try:
+    active_claims: set[str] = set()
+    for source_db in (db, global_db):
+        if source_db is None:
+            continue
         active_claims |= {
             _normalize_claim(row[0])
-            for row in db.execute(
-                "SELECT text FROM knowledge_claims WHERE status='active'"
+            for row in source_db.execute(
+                "SELECT body FROM notes WHERE status='active'"
             ).fetchall()
         }
-    except sqlite3.OperationalError:
-        pass  # knowledge map predates this scope's migrations
+        try:
+            active_claims |= {
+                _normalize_claim(row[0])
+                for row in source_db.execute(
+                    "SELECT text FROM knowledge_claims WHERE status='active'"
+                ).fetchall()
+            }
+        except sqlite3.OperationalError:
+            pass  # knowledge map predates this scope's migrations
     candidates_dir = scope_dir / "candidates"
     pending_claims = set()
     for item in list_candidates(candidates_dir):
