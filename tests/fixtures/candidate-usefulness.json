@@ -1,0 +1,5 @@
+[
+  {"name":"health-dogfood","trace":"health-session.jsonl","expected_terms":["./health.sh","pytest","Ruff","executable"]},
+  {"name":"test-command","messages":["Tests finished.","`python -m pytest` is the test command and should run from the repository root."],"expected_terms":["python -m pytest","repository root"]},
+  {"name":"config-fact","messages":["Done.","`routing.toml` is the routing configuration and requires a models table."],"expected_terms":["routing.toml","models table"]}
+]
