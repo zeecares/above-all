@@ -16,6 +16,7 @@ from .consolidation import (
     propose_weekly,
 )
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
+from .delivery import check_delivery, deliver, import_provider_memory
 from .doctor import run_doctor, run_status
 from .evals import check_thresholds, compare_retrievers, evaluate_fixture, load_fixture
 from .memory_backend import get_backend
@@ -108,6 +109,15 @@ def parser() -> argparse.ArgumentParser:
     evaluation.add_argument("--output", type=Path)
     evaluation.add_argument("--json", action="store_true")
     evaluation.add_argument("--compare-backends", action="store_true")
+    dlv = sub.add_parser("deliver")
+    dlv.add_argument("--provider", required=True)
+    dlv.add_argument("--check", action="store_true")
+    dlv.add_argument("--force", action="store_true")
+    dlv.add_argument("--budget", type=int, default=4000)
+    dlv.add_argument("--ttl-days", type=int, default=7)
+    imp = sub.add_parser("import")
+    imp.add_argument("--provider", required=True)
+    imp.add_argument("--path", type=Path)
     analysis = sub.add_parser("analyze")
     analysis.add_argument("--min-completed", type=int, default=3)
     n = sub.add_parser("note")
@@ -266,6 +276,33 @@ def main(argv: list[str] | None = None) -> int:
             else: result = value_gate(db)
             print(json.dumps(result))
         finally: db.close()
+    elif args.command in {"deliver", "import"}:
+        if not scopes.project_root:
+            raise SystemExit(f"{args.command} requires a Git project")
+        init_scopes()
+        backend = get_backend(load_agent_config(scopes.global_root).get("memory", {}).get("backend"))
+        global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+        db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+        try:
+            if args.command == "deliver" and args.check:
+                result = check_delivery(scopes.project_root, args.provider)
+            elif args.command == "deliver":
+                result = deliver(
+                    scopes.project_root, db, backend, global_db,
+                    provider=args.provider, force=args.force,
+                    budget_bytes=args.budget, ttl_days=args.ttl_days,
+                )
+            else:
+                result = import_provider_memory(
+                    scopes.project_root, db, backend,
+                    provider=args.provider, path=args.path,
+                )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            if isinstance(result, dict) and result.get("status") in {"refused", "drifted", "no-manifest"}:
+                raise SystemExit(1)
+        finally:
+            global_db.close()
+            db.close()
     elif args.command == "do":
         init_scopes()
         config = load_agent_config(scopes.global_root)
@@ -341,4 +378,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
