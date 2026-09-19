@@ -437,12 +437,12 @@ def test_headless_harvest_retry_is_idempotent_and_repairs_both_stores(world: Wor
         assert global_db.execute(
             "SELECT COUNT(*) c FROM trace_usage WHERE session_id=?", (out["session_id"],)
         ).fetchone()["c"] == 1
-        assert global_db.execute(
+        assert tuple(global_db.execute(
             "SELECT tokens_in,tokens_out FROM sessions WHERE id=?", (out["session_id"],)
-        ).fetchone() == (10, 5)
-        assert project_db.execute(
+        ).fetchone()) == (10, 5)
+        assert tuple(project_db.execute(
             "SELECT tokens_in,tokens_out FROM sessions WHERE id=?", (out["session_id"],)
-        ).fetchone() == (10, 5)
+        ).fetchone()) == (10, 5)
     finally:
         global_db.close()
         project_db.close()
