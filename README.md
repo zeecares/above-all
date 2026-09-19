@@ -4,6 +4,14 @@ A small, provider-neutral control plane for a personal assistant that sits above
 
 ## What works today
 
+Conflict-free memory delivery (ZEE-64) makes above-all the single durable owner of curated memory while agent CLIs stay delivery surfaces:
+
+- `above-all deliver --provider claude-code` writes the same approved global/project notes into a clearly marked managed section of the provider's native context file (CLAUDE.md), with a manifest recording source note IDs, a content hash, a size budget, and an expiry
+- content outside the managed markers is user-owned and never edited; an existing provider file is adopted, not overwritten
+- `above-all deliver --check` reports clean, drifted, expired, missing, or unmanaged; drift inside the managed section is refused, never silently overwritten (`--force` regenerates after review)
+- `above-all import --provider claude-code` reads provider-native memory as review-only candidates with provider/file provenance, deduplicated against active notes, the knowledge map, and pending candidates; nothing is promoted without the existing human review path
+- providers register only after their native format is verified; pi stays disabled until a real fixture confirms it (ZEE-57), and unknown providers fail loudly
+
 Weekend 4 adds reviewed consolidation and restrained proactivity:
 
 - a daily expiry sweep marks stale active notes `needs-review`, removes them from FTS, and never touches candidates
@@ -95,3 +103,4 @@ above-all eval tests/fixtures/eval-golden.json --compare-backends --json
 ```
 
 The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
+
