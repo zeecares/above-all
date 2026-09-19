@@ -9,7 +9,12 @@ from .agent_context import generate_agent_context
 from .analysis import analyze
 from .async_outcomes import launch_async, reconcile
 from .config import configured_command, load_agent_config
-from .consolidation import apply_changeset, daily_expiry_sweep, pollution_metrics, propose_weekly
+from .consolidation import (
+    apply_changeset,
+    daily_expiry_sweep,
+    pollution_metrics,
+    propose_weekly,
+)
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .doctor import run_doctor, run_status
 from .evals import check_thresholds, evaluate_fixture, load_fixture
