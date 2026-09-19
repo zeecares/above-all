@@ -137,7 +137,7 @@ def test_existing_provider_file_is_adopted_not_overwritten(tmp_path):
     result = deliver(scope_dir, db, backend, gdb, provider="claude-code")
     assert result["status"] == "written"
     text = target.read_text()
-    assert text.startswith(original)
+    assert text.encode().startswith(original.encode())
     assert BEGIN in text and "approved fact" in text
 
 
@@ -354,3 +354,98 @@ def test_cli_deliver_check_and_import(tmp_path, monkeypatch, capsys):
 
     with pytest.raises(ValueError, match="ZEE-57"):
         main(["deliver", "--provider", "pi"])
+
+
+
+def test_adoption_preserves_all_original_bytes_including_trailing_whitespace(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "approved fact")
+    target = env.project / "CLAUDE.md"
+    original = b"# User content\n\nkeep trailing bytes   \n \n"
+    target.write_bytes(original)
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code")
+    assert target.read_bytes().startswith(original)
+
+
+def test_force_preserves_user_bytes_around_drifted_section(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "approved fact")
+    target = env.project / "CLAUDE.md"
+    prefix = "# User prefix\n\n"
+    suffix = "\n\n# User suffix\n\ntrailing   \n"
+    target.write_text(prefix + suffix)
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code")
+    delivered = target.read_text()
+    target.write_text(delivered.replace("approved fact", "drifted fact"))
+    before = target.read_text()
+    old_section = before[before.index(BEGIN): before.index(END) + len(END)]
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", force=True)
+    after = target.read_text()
+    assert after.replace(after[after.index(BEGIN): after.index(END) + len(END)], old_section) == before
+
+
+def test_budget_is_exact_and_budget_change_regenerates_manifest(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "small fact")
+    result = deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", budget_bytes=4000)
+    assert result["status"] == "written"
+    result = deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", budget_bytes=3999)
+    assert result["status"] == "written"
+    assert manifest(env.scope_dir)["budget_bytes"] == 3999
+    section = (env.project / "CLAUDE.md").read_text().split(BEGIN + "\n", 1)[1].split("\n" + END, 1)[0]
+    assert len(section.encode("utf-8")) <= 3999
+
+
+def test_ttl_change_regenerates_manifest_and_invalid_values_fail(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "approved fact")
+    now = datetime(2026, 9, 19, tzinfo=timezone.utc)
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", ttl_days=7, now=now)
+    result = deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", ttl_days=1, now=now)
+    assert result["status"] == "written"
+    data = manifest(env.scope_dir)
+    assert data["ttl_days"] == 1
+    assert datetime.fromisoformat(data["expires_at"]) == now + timedelta(days=1)
+    with pytest.raises(ValueError, match="TTL"):
+        deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", ttl_days=0)
+    with pytest.raises(ValueError, match="budget"):
+        deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", budget_bytes=0)
+
+
+def test_import_drops_managed_content_when_end_marker_is_deleted(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "managed secret fact")
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code")
+    target = env.project / "CLAUDE.md"
+    target.write_text("# User fact\n\nKeep this.\n\n" + target.read_text().replace(END, ""))
+    result = import_provider_memory(env.scope_dir, env.db, env.backend, provider="claude-code")
+    bodies = [
+        parse_note((env.scope_dir / "candidates" / f"{item['id']}.md").read_text()).body
+        for item in result["created"]
+    ]
+    assert any("Keep this." in body for body in bodies)
+    assert not any("managed secret fact" in body for body in bodies)
+
+
+def test_import_dedupes_against_global_notes_and_claims(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.global_dir, env.gdb, "Global duplicate.", title="Global")
+    target = env.project / "CLAUDE.md"
+    target.write_text("# Imported\n\nglobal duplicate.\n")
+    result = import_provider_memory(
+        env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code"
+    )
+    assert result["created"] == []
+    assert result["skipped_duplicates"] == 1
+
+
+def test_multiple_managed_sections_fail_without_touching_file(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "approved fact")
+    target = env.project / "CLAUDE.md"
+    text = f"prefix\n{BEGIN}\none\n{END}\nmiddle\n{BEGIN}\ntwo\n{END}\nsuffix\n"
+    target.write_text(text)
+    with pytest.raises(ValueError, match="multiple"):
+        deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", force=True)
+    assert target.read_text() == text
+    assert check_delivery(env.scope_dir, "claude-code")["status"] == "ambiguous"
