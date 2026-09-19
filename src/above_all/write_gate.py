@@ -70,6 +70,7 @@ def promote_candidate(
     scope_dir: Path,
     candidate_id: str,
     replaces: str | None = None,
+    contradicts: list[str] | None = None,
     *,
     fault: Callable[[str], None] | None = None,
 ) -> Path:
@@ -104,11 +105,23 @@ def promote_candidate(
             old = next((Path(row[2]) for row in active if row[0] == replaces), None)
             if old is None or not old.is_file():
                 raise ValueError(f"no active note named {replaces!r} to replace")
+        active_ids = {row[0] for row in active}
+        missing_contradictions = [
+            item.removeprefix("note:") for item in (contradicts or [])
+            if item.removeprefix("note:") not in active_ids
+        ]
+        if missing_contradictions:
+            raise ValueError(
+                "contradiction targets must be active notes: "
+                + ", ".join(sorted(missing_contradictions))
+            )
 
         metadata = dict(candidate.metadata)
         metadata["status"] = "active"
         if replaces:
             metadata["replaces"] = f"note:{replaces}"
+        if contradicts:
+            metadata["contradicts"] = [f"note:{item.removeprefix('note:')}" for item in contradicts]
         target = scope_dir / "notes" / f"{candidate_id}.md"
         files = [source, target] + ([old] if old else [])
         journal_payload = {
