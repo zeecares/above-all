@@ -28,6 +28,7 @@ from .proactivity import create_watch, due_watches, fire_watch, value_gate
 from .routing import load_routing, route
 from .session_wrapper import wrap_interactive
 from .skills import discover, load_selected
+from .trace_export import ExportSelection, export_traces
 
 
 def init_scopes(project: bool = True, share_approved: bool = False):
@@ -71,6 +72,15 @@ def parser() -> argparse.ArgumentParser:
     )
     sub.add_parser("scope")
     sub.add_parser("sessions")
+    trace = sub.add_parser("trace")
+    ts = trace.add_subparsers(dest="trace_command", required=True)
+    export = ts.add_parser("export")
+    export.add_argument("--session-id", action="append", default=[])
+    export.add_argument("--outcome-id")
+    export.add_argument("--project")
+    export.add_argument("--since")
+    export.add_argument("--until")
+    export.add_argument("--output", type=Path, required=True)
     doc = sub.add_parser("doctor")
     doc.add_argument("--json", action="store_true")
     st = sub.add_parser("status")
@@ -248,6 +258,23 @@ def main(argv: list[str] | None = None) -> int:
             for failure in failures:
                 print(f"threshold failure: {failure}")
             raise SystemExit(1)
+    elif args.command == "trace":
+        init_scopes()
+        global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
+        project_db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS) if scopes.project_root else None
+        stores = [(global_db, "global", None)]
+        if project_db is not None:
+            stores.append((project_db, "project", scopes.project_root.parent.name))
+        try:
+            selection = ExportSelection(tuple(args.session_id), args.outcome_id, args.project, args.since, args.until)
+            result = export_traces(stores, args.output, selection)
+        except (ValueError, FileExistsError, FileNotFoundError) as exc:
+            raise SystemExit(str(exc)) from exc
+        finally:
+            global_db.close()
+            if project_db is not None:
+                project_db.close()
+        print(json.dumps(result, indent=2, sort_keys=True))
     elif args.command == "sessions":
         init_scopes()
         global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)
@@ -382,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
