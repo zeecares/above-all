@@ -449,3 +449,17 @@ def test_multiple_managed_sections_fail_without_touching_file(tmp_path):
         deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code", force=True)
     assert target.read_text() == text
     assert check_delivery(env.scope_dir, "claude-code")["status"] == "ambiguous"
+
+
+def test_crlf_user_content_is_preserved_byte_for_byte(tmp_path):
+    env = setup_scopes(tmp_path)
+    add_note(env.scope_dir, env.db, "first fact")
+    target = env.project / "CLAUDE.md"
+    original = b"# Windows user content\r\n\r\nKeep CRLF.\r\n"
+    target.write_bytes(original)
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code")
+    adopted = target.read_bytes()
+    assert adopted.startswith(original)
+    add_note(env.scope_dir, env.db, "second fact")
+    deliver(env.scope_dir, env.db, env.backend, env.gdb, provider="claude-code")
+    assert target.read_bytes().startswith(original)
