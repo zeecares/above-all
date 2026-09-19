@@ -27,13 +27,14 @@ def _mean(values: list[float]) -> float:
 
 
 def _interval(values: list[float]) -> list[float]:
-    """Normal 95% interval for descriptive deltas; zero-width for one sample."""
+    """Two-sided 95% t interval for descriptive paired deltas."""
     if not values:
         return [0.0, 0.0]
     mean = _mean(values)
     if len(values) == 1:
         return [mean, mean]
-    margin = 1.96 * statistics.stdev(values) / math.sqrt(len(values))
+    t_critical_95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086, 21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060, 26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042}.get(len(values) - 1, 1.96)
+    margin = t_critical_95 * statistics.stdev(values) / math.sqrt(len(values))
     return [mean - margin, mean + margin]
 
 
@@ -109,7 +110,7 @@ def evaluate_fixture(fixture: dict[str, Any], *, k: int | None = None) -> dict[s
         found_ids = [row["id"] for row in found]
         relevant = {str(item) for item in case.get("relevant_note_ids", [])}
         hits = relevant.intersection(found_ids)
-        precision.append(len(hits) / len(found_ids) if found_ids else (1.0 if not relevant else 0.0))
+        precision.append(len(hits) / top_k if found_ids else (1.0 if not relevant else 0.0))
         recall.append(len(hits) / len(relevant) if relevant else 1.0)
         rank = next((i for i, note_id in enumerate(found_ids, 1) if note_id in relevant), None)
         reciprocal_ranks.append(1.0 / rank if rank else (1.0 if not relevant else 0.0))
@@ -128,7 +129,7 @@ def evaluate_fixture(fixture: dict[str, Any], *, k: int | None = None) -> dict[s
         expected_abstention = bool(case.get("expected_abstention", False))
         actual_abstention = bool(answer and answer.get("abstained", False))
         if answer is not None:
-            factual_scores.append(len(expected.intersection(supported)) / len(expected) if expected else 1.0)
+            factual_scores.append(len(expected.intersection(claims)) / len(expected) if expected else 1.0)
             unsupported = (claims - supported) | claims.intersection(forbidden)
             unsupported_rates.append(len(unsupported) / len(claims) if claims else 0.0)
             abstention_scores.append(float(actual_abstention == expected_abstention))
@@ -176,8 +177,17 @@ def check_thresholds(report: dict[str, Any], thresholds: dict[str, Any]) -> list
     failures = []
     sections = {"retrieval": report["retrieval"], "answers": report["answers"]}
     for section, values in thresholds.items():
-        for metric, minimum in values.items():
+        if section not in sections:
+            raise ValueError(f"unknown threshold section {section!r}")
+        for metric, rule in values.items():
+            if metric not in sections[section]:
+                raise ValueError(f"unknown threshold metric {section}.{metric}")
             actual = float(sections[section][metric])
-            if actual < float(minimum):
-                failures.append(f"{section}.{metric}={actual:.6f} below {float(minimum):.6f}")
+            bounds = {"min": rule} if isinstance(rule, (int, float)) else rule
+            if not isinstance(bounds, dict) or not set(bounds).issubset({"min", "max"}):
+                raise ValueError(f"invalid threshold rule for {section}.{metric}")
+            if "min" in bounds and actual < float(bounds["min"]):
+                failures.append(f"{section}.{metric}={actual:.6f} below {float(bounds['min']):.6f}")
+            if "max" in bounds and actual > float(bounds["max"]):
+                failures.append(f"{section}.{metric}={actual:.6f} above {float(bounds['max']):.6f}")
     return failures
