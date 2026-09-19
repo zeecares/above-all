@@ -56,3 +56,27 @@ Agent CLI commands default to placeholders in `config/agent.example.toml`; copy 
 
 
 
+
+
+## Held-out evaluation
+
+`above-all eval` runs a provider-neutral, held-out scorecard before retrieval changes ship:
+
+```bash
+above-all eval tests/fixtures/eval-golden.json \
+  --thresholds tests/fixtures/eval-thresholds.json \
+  --output eval-baseline.json
+```
+
+The deterministic CI path reports precision@k, true labeled recall@k, MRR,
+stale and cross-project leakage, plus labeled factual accuracy, unsupported-claim
+rate, and abstention accuracy. A fixture can also carry paired with-memory and
+no-memory observations for input/output/cached tokens, reported cost, and
+latency; these are reported as deltas with descriptive 95% confidence intervals.
+They are not called savings.
+
+Answer scoring is deliberately separate from answer generation. CI scores
+labeled claims already in a fixture and makes no model call. Real-model replay
+can produce those observations later, opt-in, without making CI depend on a
+provider. This `recall@k` is true held-out retrieval recall and is distinct from
+the existing operational event proxy named `retrieval_recall`.

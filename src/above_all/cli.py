@@ -9,9 +9,15 @@ from .agent_context import generate_agent_context
 from .analysis import analyze
 from .async_outcomes import launch_async, reconcile
 from .config import configured_command, load_agent_config
-from .consolidation import apply_changeset, daily_expiry_sweep, pollution_metrics, propose_weekly
+from .consolidation import (
+    apply_changeset,
+    daily_expiry_sweep,
+    pollution_metrics,
+    propose_weekly,
+)
 from .db import GLOBAL_MIGRATIONS, PROJECT_MIGRATIONS, migrate
 from .doctor import run_doctor, run_status
+from .evals import check_thresholds, evaluate_fixture, load_fixture
 from .memory_backend import get_backend
 from .notes import create_note, index_note, list_candidates, search_notes
 from .operations import run_maintenance
@@ -95,6 +101,12 @@ def parser() -> argparse.ArgumentParser:
     ws.add_parser("list")
     fire = ws.add_parser("fire"); fire.add_argument("watch_id"); fire.add_argument("payload_json"); fire.add_argument("--value")
     ws.add_parser("drain")
+    evaluation = sub.add_parser("eval")
+    evaluation.add_argument("fixture", type=Path)
+    evaluation.add_argument("--k", type=int)
+    evaluation.add_argument("--thresholds", type=Path)
+    evaluation.add_argument("--output", type=Path)
+    evaluation.add_argument("--json", action="store_true")
     analysis = sub.add_parser("analyze")
     analysis.add_argument("--min-completed", type=int, default=3)
     n = sub.add_parser("note")
@@ -170,6 +182,49 @@ def main(argv: list[str] | None = None) -> int:
                 f"{report['proposed_changesets']} proposed changesets"
             )
             print(f"warnings: {report['warnings']}, blocked outcomes: {report['blocked_outcomes']}")
+    elif args.command == "eval":
+        report = evaluate_fixture(load_fixture(args.fixture), k=args.k)
+        failures = []
+        if args.thresholds:
+            failures = check_thresholds(report, load_fixture(args.thresholds))
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if args.json:
+            print(json.dumps(report, sort_keys=True))
+        else:
+            retrieval = report["retrieval"]
+            answers = report["answers"]
+            print(f"cases: {report['case_count']}, k={report['k']}")
+            print(
+                "retrieval: "
+                f"precision@k={retrieval['precision_at_k']:.3f} "
+                f"recall@k={retrieval['recall_at_k']:.3f} mrr={retrieval['mrr']:.3f}"
+            )
+            print(
+                "leakage: "
+                f"stale={retrieval['stale_leakage_rate']:.3f} "
+                f"cross-project={retrieval['cross_project_leakage_rate']:.3f}"
+            )
+            print(
+                "answers: "
+                f"factual={answers['factual_accuracy']:.3f} "
+                f"unsupported={answers['unsupported_claim_rate']:.3f} "
+                f"abstention={answers['abstention_accuracy']:.3f} "
+                f"(labeled={answers['evaluated_case_count']})"
+            )
+            paired = report["with_memory_vs_no_memory"]
+            print(f"paired comparisons: {paired['sample_count']}")
+            for name in ("input_tokens", "output_tokens", "cached_tokens", "cost_usd", "latency_ms"):
+                value = paired[name]
+                low, high = value["confidence_interval_95"]
+                print(f"  {name}: delta={value['mean_delta']:.3f}, 95% CI [{low:.3f}, {high:.3f}]")
+            for limitation in report["limitations"]:
+                print(f"caveat: {limitation}")
+        if failures:
+            for failure in failures:
+                print(f"threshold failure: {failure}")
+            raise SystemExit(1)
     elif args.command == "sessions":
         init_scopes()
         global_db = migrate(scopes.global_root / "assistant.db", GLOBAL_MIGRATIONS)

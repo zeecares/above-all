@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "k": 3,
+  "notes": [
+    {
+      "id": "color",
+      "scope": "global",
+      "title": "Preferred color",
+      "body": "The preferred color used to be red.",
+      "status": "active",
+      "stale_after": "2020-01-01"
+    },
+    {
+      "id": "color",
+      "scope": "project-a",
+      "title": "Preferred color",
+      "body": "The preferred color is blue.",
+      "status": "active"
+    },
+    {
+      "id": "launch",
+      "scope": "project-a",
+      "title": "Launch target",
+      "body": "Project Aurora launches on Friday.",
+      "status": "active"
+    },
+    {
+      "id": "launch",
+      "scope": "project-b",
+      "title": "Launch target",
+      "body": "Project Borealis launches on Monday.",
+      "status": "active"
+    },
+    {
+      "id": "duplicate",
+      "scope": "project-a",
+      "title": "Launch target copy",
+      "body": "Project Aurora launches on Friday.",
+      "status": "superseded"
+    },
+    {
+      "id": "old-budget",
+      "scope": "global",
+      "title": "Budget approval",
+      "body": "The old budget was approved.",
+      "status": "active",
+      "stale_after": "2020-01-01"
+    }
+  ],
+  "cases": [
+    {
+      "id": "changed-fact-overlay",
+      "scope": "project-a",
+      "query": "preferred color blue",
+      "relevant_note_ids": [
+        "color"
+      ],
+      "stale_note_ids": [],
+      "forbidden_scopes": [
+        "project-b"
+      ],
+      "expected_facts": [
+        "color=blue"
+      ],
+      "forbidden_facts": [
+        "color=red"
+      ],
+      "expected_abstention": false,
+      "answer": {
+        "claims": [
+          "color=blue"
+        ],
+        "supported_facts": [
+          "color=blue"
+        ],
+        "abstained": false
+      }
+    },
+    {
+      "id": "project-isolation",
+      "scope": "project-a",
+      "query": "Aurora launch Friday",
+      "relevant_note_ids": [
+        "launch"
+      ],
+      "stale_note_ids": [],
+      "forbidden_scopes": [
+        "project-b"
+      ],
+      "expected_facts": [
+        "launch=Friday"
+      ],
+      "forbidden_facts": [
+        "launch=Monday"
+      ],
+      "expected_abstention": false,
+      "answer": {
+        "claims": [
+          "launch=Friday"
+        ],
+        "supported_facts": [
+          "launch=Friday"
+        ],
+        "abstained": false
+      }
+    },
+    {
+      "id": "unsupported-inference",
+      "scope": "project-a",
+      "query": "budget approved",
+      "relevant_note_ids": [],
+      "stale_note_ids": [],
+      "forbidden_scopes": [
+        "project-b"
+      ],
+      "expected_facts": [],
+      "forbidden_facts": [
+        "budget=approved"
+      ],
+      "expected_abstention": true,
+      "answer": {
+        "claims": [],
+        "supported_facts": [],
+        "abstained": true
+      }
+    },
+    {
+      "id": "stale-exclusion",
+      "scope": "project-a",
+      "query": "old budget approved",
+      "relevant_note_ids": [],
+      "stale_note_ids": [
+        "old-budget"
+      ],
+      "forbidden_scopes": [
+        "project-b"
+      ],
+      "expected_facts": [],
+      "forbidden_facts": [
+        "color=red"
+      ],
+      "expected_abstention": true,
+      "answer": {
+        "claims": [],
+        "supported_facts": [],
+        "abstained": true
+      }
+    },
+    {
+      "id": "cross-project-negative",
+      "scope": "project-a",
+      "query": "Borealis Monday",
+      "relevant_note_ids": [],
+      "stale_note_ids": [],
+      "forbidden_scopes": [
+        "project-b"
+      ],
+      "expected_facts": [],
+      "forbidden_facts": [
+        "launch=Monday"
+      ],
+      "expected_abstention": true,
+      "answer": {
+        "claims": [],
+        "supported_facts": [],
+        "abstained": true
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "run-1",
+      "with_memory": {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "cached_tokens": 20,
+        "cost_usd": 0.01,
+        "latency_ms": 80
+      },
+      "no_memory": {
+        "input_tokens": 150,
+        "output_tokens": 40,
+        "cached_tokens": 0,
+        "cost_usd": 0.02,
+        "latency_ms": 70
+      }
+    },
+    {
+      "id": "run-2",
+      "with_memory": {
+        "input_tokens": 130,
+        "output_tokens": 32,
+        "cached_tokens": 25,
+        "cost_usd": 0.012,
+        "latency_ms": 82
+      },
+      "no_memory": {
+        "input_tokens": 155,
+        "output_tokens": 38,
+        "cached_tokens": 0,
+        "cost_usd": 0.019,
+        "latency_ms": 75
+      }
+    }
+  ]
+}
