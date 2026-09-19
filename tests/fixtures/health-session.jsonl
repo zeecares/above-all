@@ -1,0 +1,3 @@
+{"type":"user","sessionId":"health-dogfood","uuid":"u1","message":{"content":"Check how this repository is validated."}}
+{"type":"assistant","sessionId":"health-dogfood","uuid":"a1","message":{"content":"I will inspect the repository."}}
+{"type":"assistant","sessionId":"health-dogfood","uuid":"a2","message":{"content":"`./health.sh` is the repository health command. It runs pytest and Ruff, and the file should remain executable."}}

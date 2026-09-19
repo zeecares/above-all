@@ -38,6 +38,10 @@ def init_scopes(project: bool = True, share_approved: bool = False):
     for name in ("routing", "agent"):
         target = scopes.global_root / f"{name}.toml"
         example = examples / f"{name}.example.toml"
+        if not example.is_file():
+            source_example = Path(__file__).parents[2] / "config" / f"{name}.example.toml"
+            if source_example.is_file():
+                example = source_example
         if not target.exists() and example.is_file():
             target.write_bytes(example.read_bytes())
     if project and scopes.project_root:
@@ -378,5 +382,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
