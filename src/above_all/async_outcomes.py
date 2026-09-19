@@ -230,7 +230,7 @@ def _harvest(manifest: dict, summary: str) -> bool:
             json.dumps({"status": "done", "warnings": warnings}, indent=2) + "\n"
         )
         return True
-    except Exception as exc:  # outcome is already durable; reconcile will retry harvest
+    except Exception as exc:  # noqa: BLE001 - outcome durable; reconcile retries harvest
         (session_dir / "harvest-error.log").write_text(f"{type(exc).__name__}: {exc}\n")
         return False
 
