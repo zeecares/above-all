@@ -123,9 +123,14 @@ def parser() -> argparse.ArgumentParser:
     approve = ns.add_parser("approve")
     approve.add_argument("candidate_id")
     approve.add_argument("--replace")
+    approve.add_argument("--contradicts", action="append", default=[])
     discard = ns.add_parser("discard")
     discard.add_argument("candidate_id")
     ns.add_parser("context")
+    memory = sub.add_parser("memory")
+    ms = memory.add_subparsers(dest="memory_command", required=True)
+    why = ms.add_parser("why", aliases=["explain"])
+    why.add_argument("query")
     return p
 
 
@@ -287,6 +292,13 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"session_id": result.session_id, "status": result.status,
                           "exit_code": result.exit_code, "summary": result.summary,
                           "warnings": result.warnings, "session_dir": str(result.session_dir)}))
+    elif args.command == "memory":
+        if not scopes.project_root:
+            raise SystemExit("memory commands require a Git project")
+        from .knowledge import why
+
+        db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
+        print(json.dumps(why(db, args.query)))
     elif args.note_command == "add":
         if not scopes.project_root:
             raise SystemExit("note commands require a Git project")
@@ -309,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(list_candidates(scopes.project_root / "candidates")))
         elif args.note_command == "approve":
             db = migrate(scopes.project_root / "assistant.db", PROJECT_MIGRATIONS)
-            print(backend.approve(db, scopes.project_root, args.candidate_id, replaces=args.replace))
+            print(backend.approve(db, scopes.project_root, args.candidate_id, replaces=args.replace, contradicts=args.contradicts))
         elif args.note_command == "discard":
             print(backend.discard(scopes.project_root, args.candidate_id))
         else:

@@ -94,6 +94,9 @@ def index_note(db, path: Path) -> str:
                 "INSERT INTO notes_fts(note_id,title,body) VALUES (?,?,?)",
                 (note_id, title, note.body),
             )
+        from .knowledge import sync_note_map
+
+        sync_note_map(db, path, note)
     return note_id
 
 

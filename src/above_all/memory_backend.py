@@ -42,7 +42,7 @@ class MemoryBackend(Protocol):
         ...
 
     def approve(
-        self, db: sqlite3.Connection, scope_dir: Path, candidate_id: str, replaces: str | None = None
+        self, db: sqlite3.Connection, scope_dir: Path, candidate_id: str, replaces: str | None = None, contradicts: list[str] | None = None
     ) -> Path:
         """Promote a candidate to active memory, optionally superseding a note."""
         ...
@@ -74,10 +74,10 @@ class SqliteFtsBackend:
     def active_notes(self, db, limit=20):
         return _notes.active_notes(db, limit)
 
-    def approve(self, db, scope_dir, candidate_id, replaces=None):
+    def approve(self, db, scope_dir, candidate_id, replaces=None, contradicts=None):
         from .write_gate import promote_candidate
 
-        return promote_candidate(db, scope_dir, candidate_id, replaces=replaces)
+        return promote_candidate(db, scope_dir, candidate_id, replaces=replaces, contradicts=contradicts)
 
     def discard(self, scope_dir, candidate_id):
         return _notes.discard_candidate(scope_dir, candidate_id)
