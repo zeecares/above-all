@@ -205,6 +205,7 @@ def _exit_harvest(
                 sources=[f"session:{session['id']}"]
                 + ([f"outcome:{session['outcome_id']}"] if session.get("outcome_id") else []),
                 extra=note_extra or {},
+                candidate_id=f"session-{session['id']}",
             )
         except (OSError, ValueError, sqlite3.Error) as exc:  # fail loud, keep the session record
             warning = f"candidate creation failed for session {session['id']}: {exc}"
