@@ -83,3 +83,16 @@ CREATE TABLE IF NOT EXISTS proactive_events (id INTEGER PRIMARY KEY AUTOINCREMEN
 GLOBAL_MIGRATIONS.append("""CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, note_type TEXT NOT NULL, sources_json TEXT NOT NULL, generated TEXT NOT NULL, verified TEXT NOT NULL, status TEXT NOT NULL, stale_after TEXT, title TEXT NOT NULL, body TEXT NOT NULL, indexed_at TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(note_id UNINDEXED, title, body, tokenize='porter unicode61');
 """)
+
+
+
+# Provenance-backed knowledge map. It mirrors reviewed notes only; candidate files are never indexed.
+_KNOWLEDGE_MAP = """CREATE TABLE IF NOT EXISTS knowledge_entities (id TEXT PRIMARY KEY, name TEXT NOT NULL, entity_type TEXT NOT NULL, scope TEXT NOT NULL CHECK(scope IN ('global','project')), status TEXT NOT NULL, note_id TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS knowledge_claims (id TEXT PRIMARY KEY, note_id TEXT NOT NULL UNIQUE, text TEXT NOT NULL, claim_kind TEXT NOT NULL CHECK(claim_kind IN ('premise','inference')), confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1), status TEXT NOT NULL, scope TEXT NOT NULL CHECK(scope IN ('global','project')), stale_after TEXT, indexed_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS knowledge_claim_sources (claim_id TEXT NOT NULL, position INTEGER NOT NULL, source_anchor TEXT NOT NULL, PRIMARY KEY(claim_id,position), FOREIGN KEY(claim_id) REFERENCES knowledge_claims(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS knowledge_relations (id TEXT PRIMARY KEY, subject_entity_id TEXT NOT NULL, predicate TEXT NOT NULL, object_entity_id TEXT NOT NULL, claim_id TEXT NOT NULL, note_id TEXT NOT NULL, scope TEXT NOT NULL CHECK(scope IN ('global','project')), status TEXT NOT NULL, confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1), FOREIGN KEY(claim_id) REFERENCES knowledge_claims(id) ON DELETE CASCADE, FOREIGN KEY(subject_entity_id) REFERENCES knowledge_entities(id), FOREIGN KEY(object_entity_id) REFERENCES knowledge_entities(id));
+CREATE TABLE IF NOT EXISTS knowledge_claim_edges (from_claim_id TEXT NOT NULL, to_claim_id TEXT NOT NULL, edge_type TEXT NOT NULL CHECK(edge_type IN ('supersedes','contradicts')), PRIMARY KEY(from_claim_id,to_claim_id,edge_type));
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_claims_fts USING fts5(claim_id UNINDEXED, text, tokenize='porter unicode61');
+"""
+GLOBAL_MIGRATIONS.append(_KNOWLEDGE_MAP)
+PROJECT_MIGRATIONS.append(_KNOWLEDGE_MAP)
