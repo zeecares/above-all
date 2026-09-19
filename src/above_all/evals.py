@@ -7,7 +7,7 @@ import sqlite3
 import statistics
 import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +49,7 @@ def _make_index(notes: list[EvalNote], scope: str) -> sqlite3.Connection:
     db.row_factory = sqlite3.Row
     db.execute("CREATE TABLE notes(id TEXT PRIMARY KEY, scope TEXT, title TEXT, body TEXT)")
     db.execute("CREATE VIRTUAL TABLE notes_fts USING fts5(note_id UNINDEXED,title,body,tokenize='porter unicode61')")
-    today = date.today().isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
     selected: dict[str, EvalNote] = {}
     for note in notes:
         if note.scope not in {"global", scope} or note.status != "active":
