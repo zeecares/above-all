@@ -49,6 +49,9 @@ def _restore(db: sqlite3.Connection, payload: dict, *, commit: bool = True) -> N
             with db:
                 db.execute("DELETE FROM notes_fts WHERE note_id=?", (note_id,))
                 db.execute("DELETE FROM notes WHERE id=?", (note_id,))
+                from .knowledge import delete_note_map
+
+                delete_note_map(db, note_id)
     if commit:
         db.commit()
 
