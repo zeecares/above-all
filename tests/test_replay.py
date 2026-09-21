@@ -153,3 +153,19 @@ def test_empty_fixture_rejected() -> None:
     raw["operations"] = []
     with pytest.raises(ValueError, match="at least one retrieval case or operation"):
         ReplayFixture.model_validate(raw)
+
+
+def test_associative_fixture_is_explicitly_synthetic_and_lexically_disjoint() -> None:
+    fixture = load_replay_fixture(REPLAY_ROOT / "fixtures" / "associative-cues.json")
+    assert fixture.provenance.origin == "synthetic"
+    assert "synthetic" in fixture.provenance.generator.lower()
+    assert fixture.provenance.trace_session_ids == []
+    assert {case.cue_type for case in fixture.cases} == {"descriptive", "associative"}
+
+
+def test_associative_case_with_lexical_leakage_is_rejected() -> None:
+    raw = json.loads((REPLAY_ROOT / "fixtures" / "associative-cues.json").read_text())
+    case = next(case for case in raw["cases"] if case["cue_type"] == "associative")
+    case["query"] += " peanut"
+    with pytest.raises(ValueError, match="lexical overlap"):
+        ReplayFixture.model_validate(raw)
