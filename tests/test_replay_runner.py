@@ -168,3 +168,18 @@ def test_hybrid_latency_is_reported_not_hidden(tmp_path):
     latency = report["report"]["latency_ms"]
     assert latency["retrieve_mean_ms"] >= 0
     assert set(latency) == {"ingest", "index", "retrieve_mean_ms"}
+
+
+def test_associative_and_descriptive_recall_are_scored_separately(tmp_path, otel_in_memory):
+    report = run_fixture(REPLAY_ROOT / "fixtures" / "associative-cues.json", "sqlite_fts", tmp_path)
+    quality = report["report"]["quality"]
+    assert quality["descriptive_case_count"] == 3
+    assert quality["associative_case_count"] == 3
+    assert quality["descriptive_recall_at_k"] == pytest.approx(1.0)
+    # Intended negative control: lexical FTS cannot bridge zero-overlap cues.
+    assert quality["associative_recall_at_k"] == pytest.approx(0.0)
+    retrieve_span = next(
+        span for span in otel_in_memory.get_finished_spans() if span.name == "replay.phase.retrieve"
+    )
+    assert retrieve_span.attributes["replay.cases.descriptive"] == 3
+    assert retrieve_span.attributes["replay.cases.associative"] == 3
