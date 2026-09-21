@@ -125,9 +125,9 @@ validation loudly. Fixtures anchored to corpus session IDs are marked
 
 `above-all replay run` replays one version-2 fixture against a named
 MemoryBackend with phase checkpointing (ZEE-70): ingest, index, retrieve,
-answer, and evaluate each complete before the next starts, and every phase
-writes its report to `<workdir>/<fixture-id>/<backend>/<phase>.json`, so a run
-can be audited or resumed phase by phase. OpenTelemetry spans wrap each phase
+answer, and evaluate each complete before the next starts, and all phases share one checkpoint at
+`<workdir>/<backend>/<fixture-id>/checkpoint.json`; the completed run writes
+`report.json` beside it, so a run can be audited or resumed phase by phase. OpenTelemetry spans wrap each phase
 and counters/histograms record op counts and phase durations; with no SDK
 configured they are no-ops. `above-all replay compare` runs several backends
 over the same fixture and reports per-backend metrics plus deltas against the
@@ -158,5 +158,3 @@ above-all eval tests/fixtures/eval-golden.json --compare-backends --json
 ```
 
 The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
-
-
