@@ -88,6 +88,16 @@ def test_corpus_is_labeled_generated_dogfood_not_harvested() -> None:
     assert corpus.origin == "generated-dogfood"
 
 
+def test_generated_dogfood_fixtures_do_not_claim_harvested_provenance() -> None:
+    corpus = load_corpus_manifest(REPLAY_ROOT / "traces" / "manifest.json")
+    assert corpus.origin == "generated-dogfood"
+    for path in sorted((REPLAY_ROOT / "fixtures").glob("*.json")):
+        fixture = load_replay_fixture(path)
+        if fixture.provenance.origin == "synthetic":
+            report_text = f"{fixture.id} {fixture.description}".lower()
+            assert "harvested" not in report_text, path.name
+
+
 def test_corpus_anchored_fixtures_anchor_to_corpus_sessions() -> None:
     corpus = load_corpus_manifest(REPLAY_ROOT / "traces" / "manifest.json")
     known = {session.session_id for session in corpus.sessions}
