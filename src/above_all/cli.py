@@ -130,6 +130,17 @@ def parser() -> argparse.ArgumentParser:
     evaluation.add_argument("--output", type=Path)
     evaluation.add_argument("--json", action="store_true")
     evaluation.add_argument("--compare-backends", action="store_true")
+    replay = sub.add_parser("replay")
+    rs = replay.add_subparsers(dest="replay_command", required=True)
+    for name in ("run", "compare"):
+        rp = rs.add_parser(name)
+        rp.add_argument("fixture", type=Path)
+        rp.add_argument("--workdir", type=Path, default=Path(".above-all/replay-runs"))
+        rp.add_argument("--json", action="store_true")
+        if name == "run":
+            rp.add_argument("--backend", default="sqlite_fts")
+        else:
+            rp.add_argument("--backends", default="sqlite_fts,sqlite_hybrid")
     dlv = sub.add_parser("deliver")
     dlv.add_argument("--provider", required=True)
     dlv.add_argument("--check", action="store_true")
@@ -239,6 +250,23 @@ def _run_status(args, scopes) -> None:
             f"reviews: {report['candidates']} candidates, {report['proposed_changesets']} proposed changesets"
         )
         print(f"warnings: {report['warnings']}, blocked outcomes: {report['blocked_outcomes']}")
+
+
+def _run_replay(args, scopes) -> None:
+    from .replay_runner import BackendBlockedError, compare_backends, run_fixture
+
+    try:
+        if args.replay_command == "run":
+            report = run_fixture(args.fixture, args.backend, args.workdir)
+        else:
+            report = compare_backends(
+                args.fixture, [b.strip() for b in args.backends.split(",") if b.strip()], args.workdir
+            )
+    except BackendBlockedError as exc:
+        raise SystemExit(f"backend blocked: {exc}") from exc
+    except ValueError as exc:
+        raise SystemExit(f"replay error: {exc}") from exc
+    print(json.dumps(report, indent=None if args.json else 2, sort_keys=True))
 
 
 def _run_eval(args, scopes) -> None:
@@ -550,6 +578,7 @@ COMMAND_HANDLERS = {
     "do": _run_do,
     "doctor": _run_doctor,
     "eval": _run_eval,
+    "replay": _run_replay,
     "import": _run_deliver_import,
     "init": _run_init,
     "maintenance": _run_maintenance_consolidate_watch,
