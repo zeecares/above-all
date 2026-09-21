@@ -121,6 +121,33 @@ validation loudly. Fixtures anchored to corpus session IDs are marked
 `synthetic`; `harvested`/`mixed` are reserved for real-trace corpora.
 
 
+## Replay comparison runner
+
+`above-all replay run` replays one version-2 fixture against a named
+MemoryBackend with phase checkpointing (ZEE-70): ingest, index, retrieve,
+answer, and evaluate each complete before the next starts, and every phase
+checkpoints to `<workdir>/<backend>/<fixture-id>/checkpoint.json`, with the
+run `report.json` written beside it, so a run can be audited or resumed phase
+by phase. OpenTelemetry spans wrap each phase
+and counters/histograms record op counts and phase durations; with no SDK
+configured they are no-ops. `above-all replay compare` runs several backends
+over the same fixture and reports per-backend metrics plus deltas against the
+sqlite_fts baseline:
+
+    above-all replay run tests/fixtures/replay/fixtures/golden-queries.json \
+        --backend sqlite_hybrid --workdir /tmp/replay-runs
+    above-all replay compare tests/fixtures/replay/fixtures/golden-queries.json \
+        --backends sqlite_fts,sqlite_hybrid --workdir /tmp/replay-runs --json
+
+Quality metrics (recall@k, MRR, abstention accuracy, unsupported-claim rate,
+stale and cross-project leakage, context tokens) come from the same evaluators
+as `above-all eval`; latency is wall-clock per phase. `mem0_oss` and
+`supermemory_local` candidates fail loud with the blocking policy questions
+until the owner supplies the missing facts (spec/memory.md). Comparison reports
+carry a `recommendation` field that stays `adopt: null` until the corpus is
+harvested real traces - regenerated dogfood fixtures are directional only.
+
+
 ## Optional measured hybrid retrieval
 
 `sqlite_fts` remains the default. To opt into the experimental local backend, set `memory.backend = "sqlite_hybrid"` in `~/.above-all/agent.toml`. It combines FTS5/BM25 with a 256-float local signed word/character n-gram hash using reciprocal-rank fusion. It makes no API calls and downloads no model. See `LICENSES-HYBRID.md` for the complete component and redistribution inventory.

@@ -44,7 +44,7 @@
           "trace:7c3835d31bcc"
         ],
         "scope": "aurora",
-        "candidate_id": "dup-launch"
+        "candidate_id": "dup-exact"
       },
       "expect": {
         "created": true
@@ -53,7 +53,33 @@
     {
       "op": "approve",
       "args": {
-        "candidate_id": "dup-launch",
+        "candidate_id": "dup-exact",
+        "scope": "aurora"
+      },
+      "expect": {
+        "ok": false
+      }
+    },
+    {
+      "op": "create_candidate",
+      "args": {
+        "title": "Aurora launch date",
+        "body": "Aurora now launches on Monday 2026-09-28 (moved from Friday).",
+        "note_type": "fact",
+        "sources": [
+          "trace:7c3835d31bcc"
+        ],
+        "scope": "aurora",
+        "candidate_id": "dup-near"
+      },
+      "expect": {
+        "created": true
+      }
+    },
+    {
+      "op": "approve",
+      "args": {
+        "candidate_id": "dup-near",
         "replaces": "aur-launch",
         "scope": "aurora"
       },
@@ -69,10 +95,11 @@
       },
       "expect": {
         "returned_note_ids": [
-          "dup-launch"
+          "dup-near"
         ],
         "forbidden_note_ids": [
-          "aur-launch"
+          "aur-launch",
+          "dup-exact"
         ],
         "max_returned_for_query": 1
       }
