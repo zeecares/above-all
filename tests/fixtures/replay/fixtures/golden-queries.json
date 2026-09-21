@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "id": "harvested-golden-queries",
+  "id": "generated-dogfood-golden-queries",
   "family": "golden-queries",
-  "description": "Hand-labeled retrieval queries over notes harvested from the checked-in dogfood corpus (7 sessions, projects aurora + borealis + global). This is the pure retrieval-quality score on which sqlite_hybrid and later mem0_oss/supermemory_local earn or lose their place against sqlite_fts.",
+  "description": "Hand-labeled retrieval queries over notes generated from the checked-in synthetic dogfood corpus (7 sessions, projects aurora + borealis + global). This is the pure retrieval-quality score on which sqlite_hybrid and later mem0_oss/supermemory_local earn or lose their place against sqlite_fts.",
   "k": 3,
   "provenance": {
     "origin": "synthetic",
