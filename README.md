@@ -99,6 +99,27 @@ can produce those observations later, opt-in, without making CI depend on a
 provider. This `recall@k` is true held-out retrieval recall and is distinct from
 the existing operational event proxy named `retrieval_recall`.
 
+## Replay fixture set
+
+`tests/fixtures/replay/` holds the canonical version-2 replay fixture set used to
+compare MemoryBackend candidates (spec/memory.md): a trace corpus (`traces/`)
+plus twelve typed fixtures - one per eval family - validated by pydantic schemas
+in `above_all.replay`. The checked-in corpus is generated-dogfood, not
+harvested: it was written by a scripted stock-Claude-Code agent in an isolated
+HOME to regenerate the lost 2026-09-19 dogfood bundle, and the corpus manifest
+says so. The real corpus will be harvested from actual usage and exported
+through `above-all trace export` with its redaction rules (ZEE-55/57); until
+then this set is the canonical schema and dev smoke set, NOT the adoption gate,
+and `validate_fixture_set` rejects any attempt to mark these fixtures
+`adoption_gate=true`. Retrieval fixtures convert down to the v1 eval-golden
+shape so `above_all.evals` can score them; behavioral families (duplication,
+unsupported inference, derived-claim quarantine, profile freshness, scope
+isolation, export/delete/rebuild) declare scripted backend operations for the
+phase-checkpointed replay runner (ZEE-70). `fixture-set.json` carries sha256
+checksums for every fixture and corpus file, so a tampered corpus fails
+validation loudly. Fixtures anchored to corpus session IDs are marked
+`synthetic`; `harvested`/`mixed` are reserved for real-trace corpora.
+
 
 ## Optional measured hybrid retrieval
 
@@ -111,6 +132,5 @@ above-all eval tests/fixtures/eval-golden.json --compare-backends --json
 ```
 
 The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
-
 
 
