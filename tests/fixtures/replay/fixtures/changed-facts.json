@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "id": "changed-facts",
+  "family": "changed-facts",
+  "description": "A later fact contradicts an earlier one: the corpus presents one current note and preserves the superseded evidence. Generated from the synthetic dogfood a2 (launch Friday) -> a3 (moved to Monday) session pair.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "bceed98b8e24",
+      "7c3835d31bcc"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "aur-launch",
+      "scope": "aurora",
+      "title": "Aurora launch date",
+      "body": "Aurora launches on Monday 2026-09-28.",
+      "source_anchors": [
+        "trace:7c3835d31bcc"
+      ]
+    },
+    {
+      "id": "aur-launch-friday",
+      "scope": "aurora",
+      "title": "Aurora launch date (old)",
+      "body": "Aurora launches on Friday 2026-09-25.",
+      "status": "superseded",
+      "source_anchors": [
+        "trace:bceed98b8e24"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "current-launch",
+      "scope": "aurora",
+      "query": "aurora launch date",
+      "relevant_note_ids": [
+        "aur-launch"
+      ],
+      "stale_note_ids": [
+        "aur-launch-friday"
+      ],
+      "expected_facts": [
+        "launch=2026-09-28"
+      ],
+      "forbidden_facts": [
+        "launch=2026-09-25"
+      ]
+    },
+    {
+      "id": "old-launch-not-active",
+      "scope": "aurora",
+      "query": "Aurora Friday launch",
+      "relevant_note_ids": [],
+      "stale_note_ids": [
+        "aur-launch-friday"
+      ],
+      "forbidden_facts": [
+        "launch=2026-09-25"
+      ]
+    }
+  ]
+}

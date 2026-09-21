@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "id": "derived-claim-quarantine",
+  "family": "derived-claim-quarantine",
+  "description": "Inferred graph facts (updates/extends/derives-style) never bypass candidate/review status: they enter as source-backed candidates and stay invisible to retrieval until approved.",
+  "k": 3,
+  "provenance": {
+    "origin": "authored",
+    "trace_session_ids": [],
+    "generator": "authored scenario modelling supermemory_local graph writes, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {"id": "aur-launch", "scope": "aurora", "title": "Aurora launch date", "body": "Aurora launches on Monday 2026-09-28."}
+  ],
+  "operations": [
+    {"op": "create_candidate", "args": {"title": "Derived: launch slip pattern", "body": "Aurora launch dates tend to slip from Friday to Monday.", "note_type": "fact", "inference": "derives", "sources": ["trace:7c3835d31bcc"], "scope": "aurora", "candidate_id": "derived-slip"}, "expect": {"created": true}},
+    {"op": "search", "args": {"query": "aurora launch slip pattern", "scope": "aurora"}, "expect": {"forbidden_note_ids": ["derived-slip"]}},
+    {"op": "approve", "args": {"candidate_id": "derived-slip", "scope": "aurora"}, "expect": {"ok": true}},
+    {"op": "search", "args": {"query": "aurora launch slip pattern", "scope": "aurora"}, "expect": {"returned_note_ids": ["derived-slip"]}}
+  ]
+}

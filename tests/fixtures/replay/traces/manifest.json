@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "format": "stock-claude-code-jsonl",
+  "origin": "generated-dogfood",
+  "generator": "above-all 0.1.0 dogfood loop (scripted stock-Claude-Code agent, isolated HOME, 2026-09-21; regenerates the lost 2026-09-19 bundle with 7 sessions across two projects plus global scope)",
+  "created": "2026-09-21T09:27:22+00:00",
+  "sessions": [
+    {
+      "session_id": "269615f3a77f",
+      "project": "aurora",
+      "file": "session-0001.jsonl",
+      "export_sha256": "ebd43e7eb382c3f5924665de73eaf3a3e5d194b10ae08e4dd85d9baf5f0a59c9"
+    },
+    {
+      "session_id": "5d0ce1db411d",
+      "project": "borealis",
+      "file": "session-0002.jsonl",
+      "export_sha256": "d563b3469549cb842a0cb8ab78d780e7b082518f85848c6983bfb3c31b836372"
+    },
+    {
+      "session_id": "6338825a005e",
+      "project": null,
+      "file": "session-0003.jsonl",
+      "export_sha256": "c2b260239dc0c55e9cc1dba4673f82d0c40f8330b4c586769bfa91c40bf5b95c"
+    },
+    {
+      "session_id": "7c3835d31bcc",
+      "project": "aurora",
+      "file": "session-0004.jsonl",
+      "export_sha256": "77e4dde68a32328697e27b41e0b2f8c0c142771db05560f1d9f2628bff0b460f"
+    },
+    {
+      "session_id": "a9271f6a2226",
+      "project": "aurora",
+      "file": "session-0005.jsonl",
+      "export_sha256": "4f5b35028957bd9f4b7d5440450b8b745f173eaf02c6985fe6a0a0e4a204a267"
+    },
+    {
+      "session_id": "bceed98b8e24",
+      "project": "aurora",
+      "file": "session-0006.jsonl",
+      "export_sha256": "53c48e66f7c8cb103b461dc87e343e16f20b71a94e66babb6be8dd22af655a15"
+    },
+    {
+      "session_id": "fa7f7677dfe2",
+      "project": "borealis",
+      "file": "session-0007.jsonl",
+      "export_sha256": "809bfc8f25cc8416389c06efd2d7c642fdc3b30e9802aa9315dda32970a7a0e5"
+    }
+  ]
+}

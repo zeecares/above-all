@@ -1,0 +1,2 @@
+{"message":{"content":"Across all projects: I review PRs in the morning, so queue review requests before 10am."},"sessionId":"6338825a005e","timestamp":"2026-09-16T09:00:00Z","type":"user","uuid":"39505d3ffdfc46e6b99108de8e4f4665"}
+{"message":{"content":[{"text":"Noted as a global preference: PR reviews happen in the morning; queue requests before 10am.","type":"text"}]},"sessionId":"6338825a005e","timestamp":"2026-09-16T09:01:00Z","type":"assistant","usage":{"cache_read_input_tokens":7,"input_tokens":145,"output_tokens":28},"uuid":"588ffcb0685c48518632fc64afdb263d"}

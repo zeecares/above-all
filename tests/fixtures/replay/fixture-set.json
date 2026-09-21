@@ -1,0 +1,80 @@
+{
+  "version": 2,
+  "name": "replay-fixtures-v1",
+  "corpus": "traces/manifest.json",
+  "fixtures": [
+    {
+      "file": "fixtures/changed-facts.json",
+      "sha256": "925a7d7e70faa7b8e0028cc954d5ccc02bb05343a65ce21e8176112087b44d80",
+      "family": "changed-facts",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/cross-project-leakage.json",
+      "sha256": "88ed51df459d767b065838198de22830207932acf8d791af11eeefc3b79e75db",
+      "family": "cross-project-leakage",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/derived-claim-quarantine.json",
+      "sha256": "a18d638fec527fa1b22650f6cc452d822bf5d7f41d18c48a985e6de922cef56c",
+      "family": "derived-claim-quarantine",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/duplication.json",
+      "sha256": "8864f22dffcebe3f8a17cc5c11c18f0da83dc9231991766afcf4ceecd004c081",
+      "family": "duplication",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/export-delete-rebuild.json",
+      "sha256": "8e26e07305c6d9d70154a57899f8049535a6ea2e6ca7778b538589ecc8029347",
+      "family": "export-delete-rebuild",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/golden-queries.json",
+      "sha256": "265ad57acf2590fa60fa4b657c4189ff0bd9a9cace03c67007a9ddb8af444cce",
+      "family": "golden-queries",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/perspective-leakage.json",
+      "sha256": "a34f7b86eb8909e7af7b6f62d2ad92e2970d210552d5791601043fb84d8b4fd2",
+      "family": "perspective-leakage",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/profile-freshness.json",
+      "sha256": "591ecefe9e6c914d62b8b46341ce9335f0fd911f0c4710e1c16e2d429e77c3b2",
+      "family": "profile-freshness",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/scope-isolation.json",
+      "sha256": "119cb03db06f2a0f8c9a325f807833bf9f6f7926bfbc5fba0fc998d513e59421",
+      "family": "scope-isolation",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/source-fidelity.json",
+      "sha256": "e0bfb4f1d0b33d92f7e23540d574a21b9a25bac1d7e5280fcbfcc10c263d3656",
+      "family": "source-fidelity",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/staleness.json",
+      "sha256": "4062b6b24ea34c5102831888e1663f0bd952d497d6f19e7b75208bd80bc704bb",
+      "family": "staleness",
+      "adoption_gate": false
+    },
+    {
+      "file": "fixtures/unsupported-inference.json",
+      "sha256": "b60e2dc62acb83eaea5db7a3cbb980be8060bdbe12f8793bc19308ebd1b18078",
+      "family": "unsupported-inference",
+      "adoption_gate": false
+    }
+  ],
+  "policy": "This set is the canonical schema and dev smoke set for MemoryBackend comparison, NOT the adoption gate. The adoption decision stays null/blocked until held-out real harvested traces arrive (ZEE-55/57) and back fixtures marked adoption_gate=true; public benchmark and dogfood runs are smoke tests only (spec/memory.md)."
+}

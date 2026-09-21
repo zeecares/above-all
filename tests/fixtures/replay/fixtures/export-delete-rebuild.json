@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "id": "export-delete-rebuild",
+  "family": "export-delete-rebuild",
+  "description": "The backend can be rebuilt from approved sources, forgetting is observable, and a delete is verifiable: after delete + rebuild the forgotten note is unsearchable while its peers survive.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "a9271f6a2226",
+      "bceed98b8e24"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "aur-health",
+      "scope": "aurora",
+      "title": "Health script",
+      "body": "health.sh runs the aurora health check and must stay executable.",
+      "source_anchors": [
+        "trace:a9271f6a2226"
+      ]
+    },
+    {
+      "id": "aur-lint",
+      "scope": "aurora",
+      "title": "Linting preference",
+      "body": "The user prefers ruff over pylint for aurora.",
+      "source_anchors": [
+        "trace:bceed98b8e24"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "op": "search",
+      "args": {
+        "query": "health script",
+        "scope": "aurora"
+      },
+      "expect": {
+        "returned_note_ids": [
+          "aur-health"
+        ]
+      }
+    },
+    {
+      "op": "delete_note",
+      "args": {
+        "note_id": "aur-health",
+        "scope": "aurora"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "op": "rebuild_index",
+      "args": {
+        "scope": "aurora"
+      },
+      "expect": {
+        "gone_note_ids": [
+          "aur-health"
+        ],
+        "searchable_note_ids": [
+          "aur-lint"
+        ]
+      }
+    },
+    {
+      "op": "search",
+      "args": {
+        "query": "health script",
+        "scope": "aurora"
+      },
+      "expect": {
+        "forbidden_note_ids": [
+          "aur-health"
+        ],
+        "abstained": true
+      }
+    },
+    {
+      "op": "export",
+      "args": {
+        "scope": "aurora"
+      },
+      "expect": {
+        "min_sessions": 0
+      }
+    }
+  ]
+}
