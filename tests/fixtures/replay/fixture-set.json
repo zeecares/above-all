@@ -4,6 +4,12 @@
   "corpus": "traces/manifest.json",
   "fixtures": [
     {
+        "file": "fixtures/associative-cues.json",
+        "sha256": "6b794cb0016603031cec18bd7748d1ad2412aae0c9c9fd8542d64491f8f2cb08",
+        "family": "associative-cues",
+        "adoption_gate": false
+    },
+    {
       "file": "fixtures/changed-facts.json",
       "sha256": "925a7d7e70faa7b8e0028cc954d5ccc02bb05343a65ce21e8176112087b44d80",
       "family": "changed-facts",
