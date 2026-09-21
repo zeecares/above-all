@@ -89,7 +89,7 @@
         "scope": "aurora"
       },
       "expect": {
-        "min_sessions": 0
+        "min_notes": 1
       }
     }
   ]
