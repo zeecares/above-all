@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "id": "synthetic-associative-cues",
+  "family": "associative-cues",
+  "description": "Explicitly synthetic paired queries that distinguish descriptive lookup from associative recall. Each associative query should surface a useful memory despite sharing zero lexical tokens with that memory.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [],
+    "generator": "hand-authored synthetic ZEE-73 fixture; not harvested user data",
+    "created": "2026-09-21",
+    "note": "Synthetic benchmark-only examples. They are schema and regression data, not evidence from dogfood traces and not adoption-gate eligible."
+  },
+  "notes": [
+    {
+      "id": "diet-peanut",
+      "scope": "global",
+      "title": "Severe peanut allergy",
+      "body": "Avoid peanuts and kitchens with cross-contamination risk.",
+      "source_anchors": [
+        "synthetic:zee-73:diet-peanut"
+      ]
+    },
+    {
+      "id": "clothing-wool",
+      "scope": "global",
+      "title": "Wool sensitivity",
+      "body": "Merino causes an itchy rash; choose cotton layers instead.",
+      "source_anchors": [
+        "synthetic:zee-73:clothing-wool"
+      ]
+    },
+    {
+      "id": "travel-aisle",
+      "scope": "global",
+      "title": "Flight seat preference",
+      "body": "Choose an aisle position because frequent movement matters more than the view.",
+      "source_anchors": [
+        "synthetic:zee-73:travel-aisle"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "diet-descriptive",
+      "cue_type": "descriptive",
+      "query": "peanut allergy contamination",
+      "relevant_note_ids": [
+        "diet-peanut"
+      ]
+    },
+    {
+      "id": "diet-associative",
+      "cue_type": "associative",
+      "query": "Find somewhere suitable for dinner tonight",
+      "relevant_note_ids": [
+        "diet-peanut"
+      ]
+    },
+    {
+      "id": "clothing-descriptive",
+      "cue_type": "descriptive",
+      "query": "wool sensitivity itchy rash",
+      "relevant_note_ids": [
+        "clothing-wool"
+      ]
+    },
+    {
+      "id": "clothing-associative",
+      "cue_type": "associative",
+      "query": "Prepare for the client offsite",
+      "relevant_note_ids": [
+        "clothing-wool"
+      ]
+    },
+    {
+      "id": "travel-descriptive",
+      "cue_type": "descriptive",
+      "query": "flight aisle seat preference",
+      "relevant_note_ids": [
+        "travel-aisle"
+      ]
+    },
+    {
+      "id": "travel-associative",
+      "cue_type": "associative",
+      "query": "Arrange my journey to Lisbon",
+      "relevant_note_ids": [
+        "travel-aisle"
+      ]
+    }
+  ]
+}
