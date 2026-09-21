@@ -1,0 +1,79 @@
+{
+  "version": 2,
+  "id": "cross-project-leakage",
+  "family": "cross-project-leakage",
+  "description": "Project notes must not surface in another project's retrieval or generated context.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "bceed98b8e24",
+      "7c3835d31bcc",
+      "fa7f7677dfe2"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "aur-launch",
+      "scope": "aurora",
+      "title": "Aurora launch date",
+      "body": "Aurora launches on Monday 2026-09-28.",
+      "source_anchors": [
+        "trace:7c3835d31bcc"
+      ]
+    },
+    {
+      "id": "aur-lint",
+      "scope": "aurora",
+      "title": "Linting preference",
+      "body": "The user prefers ruff over pylint for aurora.",
+      "source_anchors": [
+        "trace:bceed98b8e24"
+      ]
+    },
+    {
+      "id": "bor-launch",
+      "scope": "borealis",
+      "title": "Borealis launch date",
+      "body": "Borealis launches on Monday 2026-10-05.",
+      "source_anchors": [
+        "trace:fa7f7677dfe2"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "borealis-sees-own-launch",
+      "scope": "borealis",
+      "query": "launch date",
+      "relevant_note_ids": [
+        "bor-launch"
+      ],
+      "forbidden_scopes": [
+        "aurora"
+      ]
+    },
+    {
+      "id": "aurora-sees-own-launch",
+      "scope": "aurora",
+      "query": "launch date",
+      "relevant_note_ids": [
+        "aur-launch"
+      ],
+      "forbidden_scopes": [
+        "borealis"
+      ]
+    },
+    {
+      "id": "borealis-no-aurora-lint",
+      "scope": "borealis",
+      "query": "ruff pylint linting preference",
+      "relevant_note_ids": [],
+      "forbidden_scopes": [
+        "aurora"
+      ]
+    }
+  ]
+}

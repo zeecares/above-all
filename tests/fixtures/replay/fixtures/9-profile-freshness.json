@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "id": "profile-freshness",
+  "family": "profile-freshness",
+  "description": "Stable approved facts remain query-independent in generated context; expired context leaves the bounded profile; the generated context stays within its byte budget.",
+  "k": 3,
+  "provenance": {
+    "origin": "authored",
+    "trace_session_ids": [],
+    "generator": "authored scenario, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {"id": "global-pr-habit", "scope": "global", "title": "PR review habit", "body": "The user reviews PRs in the morning; queue review requests before 10am."},
+    {"id": "old-budget", "scope": "global", "title": "Budget approval", "body": "The old budget was approved.", "status": "active", "stale_after": "2020-01-01"}
+  ],
+  "operations": [
+    {"op": "generate_context", "args": {"scope": "global"}, "expect": {"included_note_ids": ["global-pr-habit"], "excluded_note_ids": ["old-budget"], "max_bytes": 8192}}
+  ]
+}

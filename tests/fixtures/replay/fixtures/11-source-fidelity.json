@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "id": "source-fidelity",
+  "family": "source-fidelity",
+  "description": "Every returned or proposed fact points back to its ingested trace/document anchor; retrieval can answer why-do-you-think-this from the anchor alone.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "bceed98b8e24"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "aur-lint",
+      "scope": "aurora",
+      "title": "Linting preference",
+      "body": "The user prefers ruff over pylint for aurora.",
+      "source_anchors": [
+        "trace:bceed98b8e24"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "lint-carries-anchor",
+      "scope": "aurora",
+      "query": "linting aurora",
+      "relevant_note_ids": [
+        "aur-lint"
+      ],
+      "expected_facts": [
+        "source=trace:bceed98b8e24"
+      ]
+    }
+  ]
+}

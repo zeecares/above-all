@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "id": "staleness",
+  "family": "staleness",
+  "description": "Expired notes leave the index and retrieval abstains when nothing active matches.",
+  "k": 3,
+  "provenance": {
+    "origin": "authored",
+    "trace_session_ids": [],
+    "generator": "authored scenario, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {"id": "old-budget", "scope": "global", "title": "Budget approval", "body": "The old budget was approved.", "status": "active", "stale_after": "2020-01-01"},
+    {"id": "aur-launch", "scope": "aurora", "title": "Aurora launch date", "body": "Aurora launches on Monday 2026-09-28."}
+  ],
+  "cases": [
+    {"id": "stale-budget-abstain", "scope": "global", "query": "budget approval", "relevant_note_ids": [], "stale_note_ids": ["old-budget"], "expected_abstention": true, "answer": {"abstained": true, "claims": [], "supported_facts": []}},
+    {"id": "active-still-found", "scope": "aurora", "query": "aurora launch", "relevant_note_ids": ["aur-launch"]}
+  ]
+}

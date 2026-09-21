@@ -1,0 +1,210 @@
+{
+  "version": 2,
+  "id": "harvested-golden-queries",
+  "family": "golden-queries",
+  "description": "Hand-labeled retrieval queries over notes harvested from the checked-in dogfood corpus (7 sessions, projects aurora + borealis + global). This is the pure retrieval-quality score on which sqlite_hybrid and later mem0_oss/supermemory_local earn or lose their place against sqlite_fts.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "269615f3a77f",
+      "5d0ce1db411d",
+      "6338825a005e",
+      "7c3835d31bcc",
+      "a9271f6a2226",
+      "bceed98b8e24",
+      "fa7f7677dfe2"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "aur-health",
+      "scope": "aurora",
+      "title": "Health script",
+      "body": "health.sh runs the aurora health check and must stay executable.",
+      "source_anchors": [
+        "trace:a9271f6a2226",
+        "trace:269615f3a77f"
+      ]
+    },
+    {
+      "id": "aur-lint",
+      "scope": "aurora",
+      "title": "Linting preference",
+      "body": "The user prefers ruff over pylint for aurora.",
+      "source_anchors": [
+        "trace:bceed98b8e24"
+      ]
+    },
+    {
+      "id": "aur-launch",
+      "scope": "aurora",
+      "title": "Aurora launch date",
+      "body": "Aurora launches on Monday 2026-09-28.",
+      "source_anchors": [
+        "trace:7c3835d31bcc"
+      ]
+    },
+    {
+      "id": "aur-launch-friday",
+      "scope": "aurora",
+      "title": "Aurora launch date (old)",
+      "body": "Aurora launches on Friday 2026-09-25.",
+      "status": "superseded",
+      "source_anchors": [
+        "trace:bceed98b8e24"
+      ]
+    },
+    {
+      "id": "aur-commits",
+      "scope": "aurora",
+      "title": "Commit style",
+      "body": "Aurora uses conventional commits.",
+      "source_anchors": [
+        "trace:269615f3a77f"
+      ]
+    },
+    {
+      "id": "bor-launch",
+      "scope": "borealis",
+      "title": "Borealis launch date",
+      "body": "Borealis launches on Monday 2026-10-05.",
+      "source_anchors": [
+        "trace:fa7f7677dfe2"
+      ]
+    },
+    {
+      "id": "bor-eslint",
+      "scope": "borealis",
+      "title": "Precommit linting",
+      "body": "Borealis runs eslint --fix on precommit.",
+      "source_anchors": [
+        "trace:fa7f7677dfe2"
+      ]
+    },
+    {
+      "id": "bor-format",
+      "scope": "borealis",
+      "title": "Formatting",
+      "body": "Borealis uses prettier with a 2-space indent, never tabs.",
+      "source_anchors": [
+        "trace:5d0ce1db411d"
+      ]
+    },
+    {
+      "id": "global-pr-habit",
+      "scope": "global",
+      "title": "PR review habit",
+      "body": "The user reviews PRs in the morning; queue review requests before 10am.",
+      "observer": "above-all",
+      "source_anchors": [
+        "trace:6338825a005e"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "aurora-launch-current",
+      "scope": "aurora",
+      "query": "aurora launch date",
+      "relevant_note_ids": [
+        "aur-launch"
+      ],
+      "expected_facts": [
+        "launch=2026-09-28"
+      ],
+      "forbidden_facts": [
+        "launch=2026-09-25"
+      ]
+    },
+    {
+      "id": "aurora-lint",
+      "scope": "aurora",
+      "query": "linting aurora",
+      "relevant_note_ids": [
+        "aur-lint"
+      ],
+      "expected_facts": [
+        "lint=ruff"
+      ],
+      "forbidden_facts": [
+        "lint=pylint"
+      ]
+    },
+    {
+      "id": "aurora-health",
+      "scope": "aurora",
+      "query": "health script executable",
+      "relevant_note_ids": [
+        "aur-health"
+      ]
+    },
+    {
+      "id": "aurora-commits",
+      "scope": "aurora",
+      "query": "conventional commits",
+      "relevant_note_ids": [
+        "aur-commits"
+      ]
+    },
+    {
+      "id": "borealis-launch",
+      "scope": "borealis",
+      "query": "borealis launch date",
+      "relevant_note_ids": [
+        "bor-launch"
+      ],
+      "forbidden_scopes": [
+        "aurora"
+      ]
+    },
+    {
+      "id": "borealis-format",
+      "scope": "borealis",
+      "query": "prettier indent",
+      "relevant_note_ids": [
+        "bor-format"
+      ],
+      "forbidden_scopes": [
+        "aurora"
+      ]
+    },
+    {
+      "id": "borealis-eslint",
+      "scope": "borealis",
+      "query": "precommit linting",
+      "relevant_note_ids": [
+        "bor-eslint"
+      ]
+    },
+    {
+      "id": "global-habit-from-aurora",
+      "scope": "aurora",
+      "query": "queue review requests",
+      "relevant_note_ids": [
+        "global-pr-habit"
+      ],
+      "expected_facts": [
+        "review_window=morning"
+      ]
+    },
+    {
+      "id": "global-habit-from-borealis",
+      "scope": "borealis",
+      "query": "queue review requests",
+      "relevant_note_ids": [
+        "global-pr-habit"
+      ]
+    },
+    {
+      "id": "typescript-tooling",
+      "scope": "borealis",
+      "query": "eslint fix",
+      "relevant_note_ids": [
+        "bor-eslint"
+      ]
+    }
+  ]
+}

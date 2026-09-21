@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "id": "unsupported-inference",
+  "family": "unsupported-inference",
+  "description": "Candidates with no source or evidence anchor must be rejected; an empty claim never becomes active memory.",
+  "k": 3,
+  "provenance": {
+    "origin": "authored",
+    "trace_session_ids": [],
+    "generator": "authored scenario, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {"id": "aur-launch", "scope": "aurora", "title": "Aurora launch date", "body": "Aurora launches on Monday 2026-09-28."}
+  ],
+  "operations": [
+    {"op": "create_candidate", "args": {"title": "Unsourced hunch", "body": "Aurora probably delays again.", "note_type": "fact", "scope": "aurora", "candidate_id": "hunch"}, "expect": {"rejected": true}},
+    {"op": "search", "args": {"query": "aurora delay hunch", "scope": "aurora"}, "expect": {"forbidden_note_ids": ["hunch"]}}
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "id": "perspective-leakage",
+  "family": "perspective-leakage",
+  "description": "A note recorded from one observer's vantage must not be served as another's knowledge; attribution fields travel with retrieval.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "6338825a005e"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "global-pr-habit",
+      "scope": "global",
+      "title": "PR review habit",
+      "body": "The user reviews PRs in the morning; queue review requests before 10am.",
+      "observer": "above-all",
+      "source_anchors": [
+        "trace:6338825a005e"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "habit-with-attribution",
+      "scope": "global",
+      "query": "queue pr reviews",
+      "relevant_note_ids": [
+        "global-pr-habit"
+      ],
+      "expected_facts": [
+        "review_window=morning",
+        "subject=user",
+        "observer=above-all"
+      ]
+    }
+  ]
+}

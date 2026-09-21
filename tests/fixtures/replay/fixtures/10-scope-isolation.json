@@ -1,0 +1,76 @@
+{
+  "version": 2,
+  "id": "scope-isolation",
+  "family": "scope-isolation",
+  "description": "Global and project containers cannot cross-surface: a note approved inside one project scope is invisible to another project's retrieval and context.",
+  "k": 3,
+  "provenance": {
+    "origin": "synthetic",
+    "trace_session_ids": [
+      "fa7f7677dfe2",
+      "5d0ce1db411d"
+    ],
+    "generator": "hand-labeled from traces/manifest.json corpus, 2026-09-21",
+    "created": "2026-09-21"
+  },
+  "notes": [
+    {
+      "id": "bor-eslint",
+      "scope": "borealis",
+      "title": "Precommit linting",
+      "body": "Borealis runs eslint --fix on precommit.",
+      "source_anchors": [
+        "trace:fa7f7677dfe2"
+      ]
+    },
+    {
+      "id": "bor-format",
+      "scope": "borealis",
+      "title": "Formatting",
+      "body": "Borealis uses prettier with a 2-space indent, never tabs.",
+      "source_anchors": [
+        "trace:5d0ce1db411d"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "op": "search",
+      "args": {
+        "query": "eslint precommit",
+        "scope": "aurora"
+      },
+      "expect": {
+        "forbidden_note_ids": [
+          "bor-eslint",
+          "bor-format"
+        ],
+        "abstained": true
+      }
+    },
+    {
+      "op": "search",
+      "args": {
+        "query": "eslint precommit",
+        "scope": "borealis"
+      },
+      "expect": {
+        "returned_note_ids": [
+          "bor-eslint"
+        ]
+      }
+    },
+    {
+      "op": "generate_context",
+      "args": {
+        "scope": "aurora"
+      },
+      "expect": {
+        "excluded_note_ids": [
+          "bor-eslint",
+          "bor-format"
+        ]
+      }
+    }
+  ]
+}
