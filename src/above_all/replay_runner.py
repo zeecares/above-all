@@ -224,6 +224,7 @@ class ReplayRunner:
             case_reports.append(
                 {
                     "id": case.id,
+                    "cue_type": case.cue_type,
                     "retrieved_note_ids": ids,
                     "recall": len(relevant & set(ids)) / len(relevant) if relevant else 1.0,
                     "mrr": next(
@@ -411,8 +412,14 @@ class ReplayRunner:
         cases = artifacts["retrieve"]["cases"]
         ops = artifacts["retrieve"]["operations"]
         mean = lambda xs: sum(xs) / len(xs) if xs else 0.0
+        descriptive_cases = [c for c in cases if c["cue_type"] == "descriptive"]
+        associative_cases = [c for c in cases if c["cue_type"] == "associative"]
         retrieval = {
             "recall_at_k": mean([c["recall"] for c in cases]),
+            "descriptive_recall_at_k": mean([c["recall"] for c in descriptive_cases]),
+            "associative_recall_at_k": mean([c["recall"] for c in associative_cases]),
+            "descriptive_case_count": len(descriptive_cases),
+            "associative_case_count": len(associative_cases),
             "mrr": mean([c["mrr"] for c in cases]),
             "stale_leakage_rate": mean([c["stale_leaks"] for c in cases]),
             "cross_project_leakage_rate": mean([c["cross_leaks"] for c in cases]),
@@ -466,7 +473,16 @@ class ReplayRunner:
                     artifacts[phase] = detail
                     continue
                 started = time.perf_counter()
-                with _tracer.start_as_current_span(f"replay.phase.{phase}"):
+                with _tracer.start_as_current_span(f"replay.phase.{phase}") as phase_span:
+                    if phase == "retrieve":
+                        phase_span.set_attribute(
+                            "replay.cases.descriptive",
+                            sum(case.cue_type == "descriptive" for case in self.fixture.cases),
+                        )
+                        phase_span.set_attribute(
+                            "replay.cases.associative",
+                            sum(case.cue_type == "associative" for case in self.fixture.cases),
+                        )
                     if phase == "ingest":
                         detail = self._ingest()
                     elif phase == "index":
