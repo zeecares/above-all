@@ -1,0 +1,2 @@
+{"message":{"content":"Correction: the Aurora launch moved from Friday 2026-09-25 to Monday 2026-09-28."},"sessionId":"7c3835d31bcc","timestamp":"2026-09-17T09:00:00Z","type":"user","uuid":"5f4d4dcce1b5470583ec8e87f3871743"}
+{"message":{"content":[{"text":"Updated: Aurora now launches Monday 2026-09-28, superseding the Friday date.","type":"text"}]},"sessionId":"7c3835d31bcc","timestamp":"2026-09-17T09:01:00Z","type":"assistant","usage":{"cache_read_input_tokens":9,"input_tokens":150,"output_tokens":30},"uuid":"6a6dcfcea58f4ff0a5978049586d260b"}
