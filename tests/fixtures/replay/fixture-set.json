@@ -5,7 +5,7 @@
   "fixtures": [
     {
       "file": "fixtures/changed-facts.json",
-      "sha256": "9210a61300e5c84140daa3eb7fafc493f35cd18e6acae2d05b3aa8e3eae00723",
+      "sha256": "925a7d7e70faa7b8e0028cc954d5ccc02bb05343a65ce21e8176112087b44d80",
       "family": "changed-facts",
       "adoption_gate": false
     },
@@ -35,7 +35,7 @@
     },
     {
       "file": "fixtures/golden-queries.json",
-      "sha256": "33766c5e736758a1c55937a08323a76359077a62a4fb813c4216ec1da93e438d",
+      "sha256": "265ad57acf2590fa60fa4b657c4189ff0bd9a9cace03c67007a9ddb8af444cce",
       "family": "golden-queries",
       "adoption_gate": false
     },
