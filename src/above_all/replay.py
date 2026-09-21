@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -38,6 +39,7 @@ FIXTURE_FAMILIES = (
     "scope-isolation",
     "export-delete-rebuild",
     "golden-queries",
+    "associative-cues",
 )
 
 
@@ -82,9 +84,10 @@ class FixtureNote(BaseModel):
 
 
 class ReplayCase(BaseModel):
-    """One golden retrieval query with hand-labeled ideals (v1-compatible shape)."""
+    """One golden retrieval query, labeled by the kind of cue it exercises."""
 
     id: str
+    cue_type: Literal["descriptive", "associative"] = "descriptive"
     scope: str = "global"
     query: str
     relevant_note_ids: list[str] = Field(default_factory=list)
@@ -133,6 +136,11 @@ class FixtureProvenance(BaseModel):
     note: str | None = None
 
 
+def _lexical_terms(text: str) -> set[str]:
+    """Case-folded word tokens used to keep associative cues lexically disjoint."""
+    return set(re.findall(r"[a-z0-9]+", text.casefold()))
+
+
 class ReplayFixture(BaseModel):
     """One version-2 replay fixture: typed notes plus retrieval cases plus ops."""
 
@@ -156,10 +164,21 @@ class ReplayFixture(BaseModel):
             raise ValueError("harvested fixtures must name their source trace sessions")
         note_ids = [n.id for n in self.notes]
         known = set(note_ids)
+        notes_by_id = {note.id: note for note in self.notes}
         for case in self.cases:
             for ref in case.relevant_note_ids + case.stale_note_ids:
                 if ref not in known:
                     raise ValueError(f"case {case.id!r} references unknown note {ref!r}")
+            if case.cue_type == "associative":
+                query_terms = _lexical_terms(case.query)
+                for ref in case.relevant_note_ids:
+                    note = notes_by_id[ref]
+                    overlap = query_terms & _lexical_terms(f"{note.title} {note.body}")
+                    if overlap:
+                        raise ValueError(
+                            f"associative case {case.id!r} has lexical overlap with {ref!r}: "
+                            f"{sorted(overlap)}"
+                        )
         return self
 
 
