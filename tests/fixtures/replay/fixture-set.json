@@ -23,13 +23,13 @@
     },
     {
       "file": "fixtures/duplication.json",
-      "sha256": "8864f22dffcebe3f8a17cc5c11c18f0da83dc9231991766afcf4ceecd004c081",
+      "sha256": "23831c4e907657c724658345b17c84e1a85a3a141378c25761c5847aac0b2ca3",
       "family": "duplication",
       "adoption_gate": false
     },
     {
       "file": "fixtures/export-delete-rebuild.json",
-      "sha256": "8e26e07305c6d9d70154a57899f8049535a6ea2e6ca7778b538589ecc8029347",
+      "sha256": "9165016232986af8374c33841516a3e4b6194672faf1a275ff250aab2e975d06",
       "family": "export-delete-rebuild",
       "adoption_gate": false
     },
