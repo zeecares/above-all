@@ -574,4 +574,4 @@ def compare_backends(fixture_path: Path, backend_names: list[str], work_dir: Pat
             "adopt": None,
             "reason": "Adoption requires harvested real traces; regenerated dogfood fixtures are directional only.",
         },
-        }
+    }
