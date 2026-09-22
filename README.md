@@ -4,37 +4,41 @@ A small, provider-neutral control plane for a personal assistant that sits above
 
 ## What works today
 
-Conflict-free memory delivery (ZEE-64) makes above-all the single durable owner of curated memory while agent CLIs stay delivery surfaces:
+Conflict-free memory delivery makes above-all the single durable owner of curated memory while agent CLIs stay delivery surfaces:
 
 - `above-all deliver --provider claude-code` writes the same approved global/project notes into a clearly marked managed section of the provider's native context file (CLAUDE.md), with a manifest recording source note IDs, a content hash, a size budget, and an expiry
 - content outside the managed markers is user-owned and never edited; an existing provider file is adopted, not overwritten
 - `above-all deliver --check` reports clean, drifted, expired, missing, or unmanaged; drift inside the managed section is refused, never silently overwritten (`--force` regenerates after review)
 - `above-all import --provider claude-code` reads provider-native memory as review-only candidates with provider/file provenance, deduplicated against active notes, the knowledge map, and pending candidates; nothing is promoted without the existing human review path
-- providers register only after their native format is verified; pi stays disabled until a real fixture confirms it (ZEE-57), and unknown providers fail loudly
+- providers register only after their native format is verified; pi stays disabled until a real fixture confirms its native format, and unknown providers fail loudly
 
-Weekend 4 adds reviewed consolidation and restrained proactivity:
+Reviewed consolidation and restrained proactivity:
 
 - a daily expiry sweep marks stale active notes `needs-review`, removes them from FTS, and never touches candidates
-- the bounded weekly pass proposes a changeset for duplicates, contradictions, reviewed promotions, and Weekend 3 trace-analysis queues; it cannot apply without explicit approval and preserves superseded/contradictory evidence
+- the bounded weekly pass proposes a changeset for duplicates, contradictions, reviewed promotions, and trace-analysis queues; it cannot apply without explicit approval and preserves superseded/contradictory evidence
 - pollution metrics expose admission/use, recent replacement/contradiction, retrieval-recall, prompt-size/token/cost, and loud extraction-failure tripwires without calling a model directly
 - persisted clock, cadence, event, and deadline watches fire internal events; one fail-closed value gate uses the model-routing placeholder to require a classified decision, risk, or saved step; unclassified and internal-only items remain logged and internal
 - all learned changes remain proposals; routing and active memory change only through the existing human review path
 
-Weekend 3 adds one narrow, tested trace plane:
+The trace plane:
 
-- a stock public Claude Code JSONL adapter normalizes messages, tool calls/results, token usage, active-branch messages, tool calls/results, token usage, and recognizes known compaction/subagent marker records into the four-table trace schema
+- a stock public Claude Code JSONL adapter normalizes messages, tool calls/results, token usage, and active-branch messages, and recognizes known compaction/subagent marker records into the four-table trace schema
 - transcript import is idempotent by path and SHA-256 fingerprint; changed sources and parse errors fail loudly instead of overwriting history
-- wrapper exit imports only an explicit `transcript.jsonl` or `claude-code.jsonl` owned by that session; internal Claude Code and pi formats remain unverified and disabled
+- wrapper exit imports only an explicit `transcript.jsonl` or `claude-code.jsonl` owned by that session; non-stock Claude Code and pi formats remain unverified and disabled
 - `above-all analyze` is a quiet, SQL-first scaffold that emits system/user/eval candidate queues only after enough completed outcomes; it changes no routing or memory
 - model-neutral project skills live at `.above-all/skills/<name>/SKILL.md`, shadow global skills, validate `name` and the description/when-to-use trigger, and are injected through a session-scoped file only after explicit `--skill` selection
 
 Session memory extraction is bounded and review-only. For explicit stock Claude Code traces, exit harvest proposes a candidate from useful fact/procedure text in the final assistant answer and suppresses wrapper boilerplate or empty output. The deterministic fallback is deliberately narrow: it cannot infer a lesson hidden only in tool calls or intermediate reasoning. A provider-neutral routed-model seam may supply deeper extraction, but its output is still only a source-anchored candidate and provider failure falls back deterministically.
 
-Weekend 2 provides the headless/interactive session wrapper, handoff envelope, bounded approved context, session/outcome recording in both scopes, and candidate-only exit harvesting. The `MemoryBackend` interface keeps SQLite/FTS as the reference backend, with manual approve/replace/discard and preserved superseded evidence.
+The session layer provides the headless/interactive session wrapper, handoff envelope, bounded approved context, session/outcome recording in both scopes, and candidate-only exit harvesting. The `MemoryBackend` interface keeps SQLite/FTS as the reference backend, with manual approve/replace/discard and preserved superseded evidence.
 
-Weekend 1 established CLI/project resolution, migrations, the work-state plane, OKF-lite notes, FTS5 with staleness filtering, and editable routing.
+The core establishes CLI/project resolution, migrations, the work-state plane, OKF-lite notes, FTS5 with staleness filtering, and editable routing.
 
-Run locally:
+Install from GitHub, or run locally from a clone:
+
+```bash
+pip install "git+https://github.com/zeecares/above-all"
+```
 
 ```bash
 python -m venv .venv
@@ -53,7 +57,7 @@ ruff check .
 
 Project init writes a tracked `.above-all/.gitignore`. The default keeps the whole project scope local. `--share-approved` generates exact exceptions only for active, valid 32-hex-ID notes and generated context; rerun init after approving a new note to refresh that list. Databases, candidates, sessions, traces, logs, selected-skill files, unknown future paths, and malformed or inactive notes stay ignored. Init refuses tracked state outside the selected public surface. `above-all privacy-check [--share-approved]` validates both tracked files and the installed policy before a commit.
 
-No credentials or provider-specific endpoints are committed. The supported adapter targets the stock public Claude Code format only; confirm internal-build transcript shape before enabling it.
+No credentials or provider-specific endpoints are committed. The supported adapter targets the stock public Claude Code format only; confirm any non-stock transcript shape before enabling it.
 
 ## Safe trace export
 
@@ -102,20 +106,19 @@ the existing operational event proxy named `retrieval_recall`.
 ## Replay fixture set
 
 `tests/fixtures/replay/` holds the canonical version-2 replay fixture set used to
-compare MemoryBackend candidates (spec/memory.md): a trace corpus (`traces/`)
+compare MemoryBackend candidates: a trace corpus (`traces/`)
 plus twelve typed fixtures - one per eval family - validated by pydantic schemas
 in `above_all.replay`. The checked-in corpus is generated-dogfood, not
 harvested: it was written by a scripted stock-Claude-Code agent in an isolated
-HOME to regenerate the lost 2026-09-19 dogfood bundle, and the corpus manifest
-says so. The real corpus will be harvested from actual usage and exported
-through `above-all trace export` with its redaction rules (ZEE-55/57); until
+HOME, and the corpus manifest says so. The real corpus will be harvested from
+actual usage and exported through `above-all trace export` with its redaction rules; until
 then this set is the canonical schema and dev smoke set, NOT the adoption gate,
 and `validate_fixture_set` rejects any attempt to mark these fixtures
 `adoption_gate=true`. Retrieval fixtures convert down to the v1 eval-golden
 shape so `above_all.evals` can score them; behavioral families (duplication,
 unsupported inference, derived-claim quarantine, profile freshness, scope
 isolation, export/delete/rebuild) declare scripted backend operations for the
-phase-checkpointed replay runner (ZEE-70). `fixture-set.json` carries sha256
+phase-checkpointed replay runner. `fixture-set.json` carries sha256
 checksums for every fixture and corpus file, so a tampered corpus fails
 validation loudly. Fixtures anchored to corpus session IDs are marked
 `synthetic`; `harvested`/`mixed` are reserved for real-trace corpora.
@@ -124,7 +127,7 @@ validation loudly. Fixtures anchored to corpus session IDs are marked
 ## Replay comparison runner
 
 `above-all replay run` replays one version-2 fixture against a named
-MemoryBackend with phase checkpointing (ZEE-70): ingest, index, retrieve,
+MemoryBackend with phase checkpointing: ingest, index, retrieve,
 answer, and evaluate each complete before the next starts, and every phase
 checkpoints to `<workdir>/<backend>/<fixture-id>/checkpoint.json`, with the
 run `report.json` written beside it, so a run can be audited or resumed phase
@@ -143,7 +146,7 @@ Quality metrics (recall@k, MRR, abstention accuracy, unsupported-claim rate,
 stale and cross-project leakage, context tokens) come from the same evaluators
 as `above-all eval`; latency is wall-clock per phase. `mem0_oss` and
 `supermemory_local` candidates fail loud with the blocking policy questions
-until the owner supplies the missing facts (spec/memory.md). Comparison reports
+until those deployment policy questions are answered. Comparison reports
 carry a `recommendation` field that stays `adopt: null` until the corpus is
 harvested real traces - regenerated dogfood fixtures are directional only.
 
@@ -160,4 +163,6 @@ above-all eval tests/fixtures/eval-golden.json --compare-backends --json
 
 The checked-in golden set does not show a material quality win, so hybrid is not enabled by default. The hash representation can bridge spelling variants and some lexical drift, but it is not general semantic understanding. A larger real, hand-labeled query set is needed before reconsidering the default.
 
+## License
 
+MIT - see [LICENSE](LICENSE).
