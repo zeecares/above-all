@@ -279,11 +279,11 @@ def test_import_from_explicit_path(tmp_path):
 def test_unverified_provider_fails_loudly(tmp_path):
     env = setup_scopes(tmp_path)
     scope_dir, db, gdb, backend = env.scope_dir, env.db, env.gdb, env.backend
-    with pytest.raises(ValueError, match="ZEE-57"):
+    with pytest.raises(ValueError, match="unverified provider"):
         deliver(scope_dir, db, backend, gdb, provider="pi")
-    with pytest.raises(ValueError, match="ZEE-57"):
+    with pytest.raises(ValueError, match="unverified provider"):
         import_provider_memory(scope_dir, db, backend, provider="pi")
-    with pytest.raises(ValueError, match="ZEE-57"):
+    with pytest.raises(ValueError, match="unverified provider"):
         check_delivery(scope_dir, "pi")
 
 
@@ -352,7 +352,7 @@ def test_cli_deliver_check_and_import(tmp_path, monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert len(out["created"]) == 1
 
-    with pytest.raises(ValueError, match="ZEE-57"):
+    with pytest.raises(ValueError, match="unverified provider"):
         main(["deliver", "--provider", "pi"])
 
 
