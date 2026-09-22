@@ -1,4 +1,4 @@
-"""ZEE-69: replay fixture schemas, corpus integrity, and retrieval scoring."""
+"""Replay fixture schemas, corpus integrity, and retrieval scoring."""
 from __future__ import annotations
 
 import json
