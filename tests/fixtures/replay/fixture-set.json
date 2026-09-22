@@ -4,83 +4,83 @@
   "corpus": "traces/manifest.json",
   "fixtures": [
     {
-        "file": "fixtures/associative-cues.json",
-        "sha256": "6b794cb0016603031cec18bd7748d1ad2412aae0c9c9fd8542d64491f8f2cb08",
-        "family": "associative-cues",
-        "adoption_gate": false
+      "file": "fixtures/associative-cues.json",
+      "sha256": "3ff1693c68569b16314ded268c0a567281f2c1f2cf90518452e9e7ab57e03a0b",
+      "family": "associative-cues",
+      "adoption_gate": false
     },
     {
       "file": "fixtures/changed-facts.json",
-      "sha256": "925a7d7e70faa7b8e0028cc954d5ccc02bb05343a65ce21e8176112087b44d80",
+      "sha256": "e12b953de44c90a38e8d8bd3a32d9132ee1ad2674e1c8392761c03cdce88b8a8",
       "family": "changed-facts",
       "adoption_gate": false
     },
     {
       "file": "fixtures/cross-project-leakage.json",
-      "sha256": "88ed51df459d767b065838198de22830207932acf8d791af11eeefc3b79e75db",
+      "sha256": "18f7c6aea35c0a17ec1ef5dac60dfe4165410a792ebbe003cdd964c301e59113",
       "family": "cross-project-leakage",
       "adoption_gate": false
     },
     {
       "file": "fixtures/derived-claim-quarantine.json",
-      "sha256": "a18d638fec527fa1b22650f6cc452d822bf5d7f41d18c48a985e6de922cef56c",
+      "sha256": "e21ec89403621e9771c9110065f79457f9532e42999d6dbb52d0f53b4832ee15",
       "family": "derived-claim-quarantine",
       "adoption_gate": false
     },
     {
       "file": "fixtures/duplication.json",
-      "sha256": "23831c4e907657c724658345b17c84e1a85a3a141378c25761c5847aac0b2ca3",
+      "sha256": "b763eca944c523e10f6c543da52802b724beb1bd98a69d91b898a1fc17b430f6",
       "family": "duplication",
       "adoption_gate": false
     },
     {
       "file": "fixtures/export-delete-rebuild.json",
-      "sha256": "9165016232986af8374c33841516a3e4b6194672faf1a275ff250aab2e975d06",
+      "sha256": "468b23b2bedd892eb87fb018317fdad5c767a44f8c48f30f280811dad420464d",
       "family": "export-delete-rebuild",
       "adoption_gate": false
     },
     {
       "file": "fixtures/golden-queries.json",
-      "sha256": "265ad57acf2590fa60fa4b657c4189ff0bd9a9cace03c67007a9ddb8af444cce",
+      "sha256": "b29ac7d04a22db79fc41aafa307a69977899b4bc6192dc1ce661bc89341fc7de",
       "family": "golden-queries",
       "adoption_gate": false
     },
     {
       "file": "fixtures/perspective-leakage.json",
-      "sha256": "a34f7b86eb8909e7af7b6f62d2ad92e2970d210552d5791601043fb84d8b4fd2",
+      "sha256": "8be3dabe888da9f415754ce02f3bdf2bb7838532cf781ad600deca0909d3c4fa",
       "family": "perspective-leakage",
       "adoption_gate": false
     },
     {
       "file": "fixtures/profile-freshness.json",
-      "sha256": "591ecefe9e6c914d62b8b46341ce9335f0fd911f0c4710e1c16e2d429e77c3b2",
+      "sha256": "c9ce17ec9291db821dfe8cddc5fbd1d62e4922b3403187ac0884a92f4837d640",
       "family": "profile-freshness",
       "adoption_gate": false
     },
     {
       "file": "fixtures/scope-isolation.json",
-      "sha256": "119cb03db06f2a0f8c9a325f807833bf9f6f7926bfbc5fba0fc998d513e59421",
+      "sha256": "8652a8fe1c9ba7333096259f2eb6b497ae7d9cfd3891f71ecf60e5cab0a695c7",
       "family": "scope-isolation",
       "adoption_gate": false
     },
     {
       "file": "fixtures/source-fidelity.json",
-      "sha256": "e0bfb4f1d0b33d92f7e23540d574a21b9a25bac1d7e5280fcbfcc10c263d3656",
+      "sha256": "d5c53f6822ab1fcc065ce51724870b82433198dc25153ce3c8f65487b2f7bdc6",
       "family": "source-fidelity",
       "adoption_gate": false
     },
     {
       "file": "fixtures/staleness.json",
-      "sha256": "4062b6b24ea34c5102831888e1663f0bd952d497d6f19e7b75208bd80bc704bb",
+      "sha256": "18c29a9d6655ee1636de163fb14b76d35df2a694d9932474641a594131d90186",
       "family": "staleness",
       "adoption_gate": false
     },
     {
       "file": "fixtures/unsupported-inference.json",
-      "sha256": "b60e2dc62acb83eaea5db7a3cbb980be8060bdbe12f8793bc19308ebd1b18078",
+      "sha256": "e61400c9c976062635fb2bcab944aba4388f2bd62a0564aad2255bd9c5334224",
       "family": "unsupported-inference",
       "adoption_gate": false
     }
   ],
-  "policy": "This set is the canonical schema and dev smoke set for MemoryBackend comparison, NOT the adoption gate. The adoption decision stays null/blocked until held-out real harvested traces arrive (ZEE-55/57) and back fixtures marked adoption_gate=true; public benchmark and dogfood runs are smoke tests only (spec/memory.md)."
+  "policy": "This set is the canonical schema and dev smoke set for MemoryBackend comparison, NOT the adoption gate. The adoption decision stays null/blocked until held-out real harvested traces arrive and back fixtures marked adoption_gate=true; public benchmark and dogfood runs are smoke tests only."
 }
