@@ -1,4 +1,4 @@
-"""ZEE-70: phase-checkpointed replay runner over real backends."""
+"""Phase-checkpointed replay runner over real backends."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,7 +52,7 @@ def test_every_fixture_runs_clean_on_the_reference_backend(fixture_path, tmp_pat
 
 @pytest.mark.parametrize("fixture_path", ALL_FIXTURES, ids=lambda p: p.stem)
 def test_hybrid_runs_to_completion_and_reports_honestly(fixture_path, tmp_path, otel_in_memory):
-    # sqlite_hybrid is the measured-worse opt-in candidate (ZEE-63). The runner
+    # sqlite_hybrid is the measured-worse opt-in candidate. The runner
     # must complete and REPORT its gaps, not hide them: no leakage ever, but
     # weak semantic matches currently break abstention and dilute recall.
     report = run_fixture(fixture_path, "sqlite_hybrid", tmp_path)
