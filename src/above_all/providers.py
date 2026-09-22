@@ -6,7 +6,7 @@ surface* for approved memory, plus whatever private scratch the user or the
 provider keeps there. Provider-native memory is read-only input: it may be
 imported as review-only candidates and it never becomes a second automatic
 writer of durable memory. Pi delivery stays disabled until a real fixture
-verifies its native format (ZEE-57); do not register an unverified provider.
+verifies its native format; do not register an unverified provider.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ _PROVIDERS = {
         context_filename="CLAUDE.md",
         verified_against=(
             "stock public Claude Code: reads CLAUDE.md at the project root as "
-            "project memory; internal builds are reported very similar (ZEE-57)"
+            "project memory; non-stock builds are reported very similar but unverified"
         ),
     ),
 }
@@ -42,7 +42,7 @@ def get_provider(name: str) -> ProviderSpec:
         return spec
     available = ", ".join(sorted(_PROVIDERS))
     raise ValueError(
-        f"unverified provider {name!r} (available: {available}); pi and internal "
+        f"unverified provider {name!r} (available: {available}); pi and non-stock "
         "builds stay disabled until one real fixture confirms their native "
-        "format - see ZEE-57"
+        "format"
     )
