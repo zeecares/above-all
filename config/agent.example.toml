@@ -9,5 +9,5 @@ interactive_command = ["your-agent-cli"]
 
 [memory]
 # Reference backend. mem0_oss is a later pluggable candidate pending trace
-# evals; see spec/memory.md in the pa-spec repo.
+# evals; see tests/fixtures/replay/ for the comparison fixture set.
 backend = "sqlite_fts"
