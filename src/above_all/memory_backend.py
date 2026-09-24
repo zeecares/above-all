@@ -105,6 +105,6 @@ def get_backend(name: str | None = None) -> MemoryBackend:
         available = ", ".join(sorted(_BACKENDS))
         raise ValueError(
             f"unknown memory backend {selected!r} (available: {available}; "
-            "mem0_oss is a later pluggable candidate pending trace evals - see spec/memory.md)"
+            "mem0_oss is a later pluggable candidate pending trace evals"
         )
     return _BACKENDS[selected]()

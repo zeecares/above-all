@@ -1,19 +1,19 @@
-"""Phase-checkpointed replay runner for MemoryBackend comparison (ZEE-70).
+"""Phase-checkpointed replay runner for MemoryBackend comparison.
 
 Executes version-2 replay fixtures (above_all.replay) against real backend
 implementations in fresh on-disk scopes. Phases checkpoint as they complete -
 ingest -> index -> retrieve -> answer -> evaluate - so a failed run resumes
 from the first incomplete phase and stage costs stay inspectable.
 
-Metrics follow spec/memory.md (2026-09-21): answer/retrieval quality, latency
+Metrics: answer/retrieval quality, latency
 and context tokens reported separately, plus cost, abstention, provenance,
 pollution and operations. OpenTelemetry spans wrap each phase; the SDK is
 configured by the caller (tests use the in-memory exporter, production may
 attach OTLP).
 
-mem0_oss and supermemory_local stay blocked behind policy facts the owner has
-not supplied (internal model gateway mapping, third-party memory binary policy,
-one-binary rule); asking for them fails loudly with the exact gap.
+mem0_oss and supermemory_local stay blocked behind deployment policy decisions
+that are environment-specific (model gateway mapping, third-party memory binary
+policy, single-process constraints); asking for them fails loudly with the exact gap.
 """
 from __future__ import annotations
 
@@ -36,15 +36,15 @@ PHASES = ("ingest", "index", "retrieve", "answer", "evaluate")
 
 BLOCKED_BACKENDS = {
     "mem0_oss": (
-        "mem0_oss replay is blocked on owner policy facts: which internal model/embedding "
+        "mem0_oss replay is blocked on deployment policy facts: which model/embedding "
         "gateway endpoints it may use, and whether a vector store dependency is acceptable. "
-        "See spec/memory.md - it runs only after sqlite_hybrid shows a gap on real traces."
+        "It runs only after sqlite_hybrid shows a gap on real traces."
     ),
     "supermemory_local": (
-        "supermemory_local replay is blocked on owner policy facts: company policy on a "
-        "third-party memory binary touching internal transcripts, whether a local embedding "
-        "model is allowed or all model traffic goes through the internal gateway, and whether "
-        "a second local process breaks the one-binary rule."
+        "supermemory_local replay is blocked on deployment policy facts: policy on a "
+        "third-party memory binary touching private transcripts, whether a local embedding "
+        "model is allowed or all model traffic goes through a gateway, and whether "
+        "a second local process is acceptable."
     ),
 }
 
@@ -572,6 +572,6 @@ def compare_backends(fixture_path: Path, backend_names: list[str], work_dir: Pat
         "deltas_vs_sqlite_fts": deltas,
         "recommendation": {
             "adopt": None,
-            "reason": "Adoption requires harvested real traces; regenerated dogfood fixtures are directional only (spec/memory.md).",
+            "reason": "Adoption requires harvested real traces; regenerated dogfood fixtures are directional only.",
         },
     }

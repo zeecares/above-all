@@ -11,7 +11,7 @@ from pathlib import Path
 # "watches" as v2 would skip the new v2 and then crash re-creating watches as
 # v3). New schema changes always go at the END of the list.
 #
-# Global history: v1 core tables, v2 watches (weekend 4), v3 global notes
+# Global history: v1 core tables, v2 watches, v3 global notes
 # (memory overlay). Project history: v1 core+notes, v2 watches.
 #
 # All DDL uses IF NOT EXISTS so that stores created before schema_migrations
@@ -71,7 +71,7 @@ def merge_rows(global_rows: Iterable[sqlite3.Row], project_rows: Iterable[sqlite
     return [merged[key] for key in sorted(merged)]
 
 
-# Weekend 4: schedules and internal proactive events belong in the control plane.
+# Schedules and internal proactive events belong in the control plane.
 GLOBAL_MIGRATIONS.append("""CREATE TABLE IF NOT EXISTS watches (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('clock','cadence','event','deadline')), spec_json TEXT NOT NULL, next_fire_at TEXT, interruption_policy TEXT NOT NULL DEFAULT 'value-gated', created_at TEXT NOT NULL, identity TEXT NOT NULL UNIQUE);
 CREATE TABLE IF NOT EXISTS proactive_events (id INTEGER PRIMARY KEY AUTOINCREMENT, watch_id TEXT, created_at TEXT NOT NULL, payload_json TEXT NOT NULL, value TEXT, status TEXT NOT NULL CHECK(status IN ('pending','surfaced','internal')) DEFAULT 'pending', FOREIGN KEY(watch_id) REFERENCES watches(id));
 """)

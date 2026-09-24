@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": "stock-claude-code-jsonl",
   "origin": "generated-dogfood",
-  "generator": "above-all 0.1.0 dogfood loop (scripted stock-Claude-Code agent, isolated HOME, 2026-09-21; regenerates the lost 2026-09-19 bundle with 7 sessions across two projects plus global scope)",
+  "generator": "above-all 0.1.0 dogfood loop (scripted stock-Claude-Code agent, isolated HOME, 2026-09-21; 7 sessions across two projects plus global scope)",
   "created": "2026-09-21T09:27:22+00:00",
   "sessions": [
     {

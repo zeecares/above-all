@@ -4,10 +4,10 @@
   "corpus": "traces/manifest.json",
   "fixtures": [
     {
-        "file": "fixtures/associative-cues.json",
-        "sha256": "6b794cb0016603031cec18bd7748d1ad2412aae0c9c9fd8542d64491f8f2cb08",
-        "family": "associative-cues",
-        "adoption_gate": false
+      "file": "fixtures/associative-cues.json",
+      "sha256": "3ff1693c68569b16314ded268c0a567281f2c1f2cf90518452e9e7ab57e03a0b",
+      "family": "associative-cues",
+      "adoption_gate": false
     },
     {
       "file": "fixtures/changed-facts.json",
@@ -82,5 +82,5 @@
       "adoption_gate": false
     }
   ],
-  "policy": "This set is the canonical schema and dev smoke set for MemoryBackend comparison, NOT the adoption gate. The adoption decision stays null/blocked until held-out real harvested traces arrive (ZEE-55/57) and back fixtures marked adoption_gate=true; public benchmark and dogfood runs are smoke tests only (spec/memory.md)."
+  "policy": "This set is the canonical schema and dev smoke set for MemoryBackend comparison, NOT the adoption gate. The adoption decision stays null/blocked until held-out real harvested traces arrive and back fixtures marked adoption_gate=true; public benchmark and dogfood runs are smoke tests only."
 }

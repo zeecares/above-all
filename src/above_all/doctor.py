@@ -142,8 +142,8 @@ def _transcript_checks(config: dict | None) -> list[dict]:
     return [_check(
         "transcript capture", "warn",
         f"no transcript adapter for provider {provider!r}; the trace plane stays inactive",
-        "only the stock public Claude Code JSONL format is supported; internal or "
-        "other builds need an adapter confirmed against their real transcript format "
+        "only the stock public Claude Code JSONL format is supported; other "
+        "builds need an adapter confirmed against their real transcript format "
         "before traces can be imported",
     )]
 

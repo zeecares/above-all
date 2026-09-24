@@ -7,7 +7,7 @@
   "provenance": {
     "origin": "synthetic",
     "trace_session_ids": [],
-    "generator": "hand-authored synthetic ZEE-73 fixture; not harvested user data",
+    "generator": "hand-authored synthetic fixture; not harvested user data",
     "created": "2026-09-21",
     "note": "Synthetic benchmark-only examples. They are schema and regression data, not evidence from dogfood traces and not adoption-gate eligible."
   },
@@ -18,7 +18,7 @@
       "title": "Severe peanut allergy",
       "body": "Avoid peanuts and kitchens with cross-contamination risk.",
       "source_anchors": [
-        "synthetic:zee-73:diet-peanut"
+        "synthetic:assoc:diet-peanut"
       ]
     },
     {
@@ -27,7 +27,7 @@
       "title": "Wool sensitivity",
       "body": "Merino causes an itchy rash; choose cotton layers instead.",
       "source_anchors": [
-        "synthetic:zee-73:clothing-wool"
+        "synthetic:assoc:clothing-wool"
       ]
     },
     {
@@ -36,7 +36,7 @@
       "title": "Flight seat preference",
       "body": "Choose an aisle position because frequent movement matters more than the view.",
       "source_anchors": [
-        "synthetic:zee-73:travel-aisle"
+        "synthetic:assoc:travel-aisle"
       ]
     }
   ],

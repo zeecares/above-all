@@ -1,16 +1,16 @@
-"""Replay fixture schemas for memory-backend comparison (ZEE-69).
+"""Replay fixture schemas for memory-backend comparison.
 
 Pydantic models for the canonical replay fixture set: trace corpora, typed
 notes with source anchors, golden retrieval queries, and declarative
 backend-operation scenarios. The checked-in set is the canonical schema and
 dev smoke set, NOT the adoption gate: its corpus is generated-dogfood
 (scripted agent), and gate eligibility is reserved for fixtures anchored to
-held-out real harvested traces (ZEE-55/57). The v1 eval-golden format
+held-out real harvested traces. The v1 eval-golden format
 (evals.py) converts in through :func:`to_eval_fixture_v1` so the deterministic
 CI evaluator can still score the retrieval half.
 
-Spec: pa-spec spec/memory.md "Memory evals" (2026-09-21 amendment). Fixtures
-are data; the phase-checkpointed runner that executes them is ZEE-70.
+Fixtures are data;
+the phase-checkpointed runner executes them.
 """
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ class ReplayCase(BaseModel):
 class ReplayOperation(BaseModel):
     """One scripted backend operation for the behavioral scenario families.
 
-    Executed by the ZEE-70 runner inside a fresh scope. `expect` fields are
+    Executed by the replay runner inside a fresh scope. `expect` fields are
     assertions: an operation whose expectation fails marks the fixture failed
     for that backend.
     """
@@ -201,9 +201,8 @@ class FixtureSet(BaseModel):
     policy: str = (
         "This set is the canonical schema and dev smoke set for MemoryBackend comparison, "
         "NOT the adoption gate. The adoption decision stays null/blocked until held-out "
-        "real harvested traces arrive (ZEE-55/57) and back fixtures marked "
-        "adoption_gate=true; public benchmark and dogfood runs are smoke tests only "
-        "(spec/memory.md)."
+        "real harvested traces arrive and back fixtures marked "
+        "adoption_gate=true; public benchmark and dogfood runs are smoke tests only."
     )
 
 
